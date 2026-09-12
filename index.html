@@ -76,8 +76,8 @@
             width: 9px;
             height: 9px;
             border-radius: 50%;
-            background: #38d39f;
-            box-shadow: 0 0 12px rgba(56, 211, 159, 0.7);
+            background: #f2c96b;
+            box-shadow: 0 0 12px rgba(242, 201, 107, 0.5);
         }
 
         .top-grid {
@@ -141,6 +141,14 @@
         }
 
         .prediction-call.pass {
+            color: #f2c96b;
+        }
+
+        .prediction-call.collecting {
+            color: #7f8cff;
+        }
+
+        .prediction-call.wait {
             color: #f2c96b;
         }
 
@@ -454,6 +462,7 @@
 
                 <div>
                     <h1>ODIN</h1>
+
                     <div class="subtitle">
                         Crypto.com Strike Options Terminal
                     </div>
@@ -461,17 +470,25 @@
             </div>
 
             <div class="status">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Connecting...</span>
+                <div
+                    class="status-dot"
+                    id="statusDot"
+                ></div>
+
+                <span id="statusText">
+                    Connecting...
+                </span>
             </div>
         </header>
 
         <section class="top-grid">
 
             <!-- PREDICTIONS -->
+
             <div class="card prediction">
 
                 <div class="card-header">
+
                     <div class="card-title">
                         Predictions
                     </div>
@@ -479,6 +496,7 @@
                     <div id="phaseText">
                         Waiting
                     </div>
+
                 </div>
 
                 <div class="card-body">
@@ -486,6 +504,7 @@
                     <div class="prediction-main">
 
                         <div>
+
                             <div
                                 id="predictionCall"
                                 class="prediction-call pass"
@@ -499,6 +518,7 @@
                             >
                                 Waiting for contract...
                             </div>
+
                         </div>
 
                         <div class="prediction-meta">
@@ -658,6 +678,7 @@
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Market probability
                             </span>
@@ -669,15 +690,16 @@
                                 --
                             </span>
 
+                        </div>
+
+                        <div
+                            class="market-bar"
+                            id="marketBar"
+                        >
                             <div
-                                class="market-bar"
-                                style="display: none;"
-                            >
-                                <div
-                                    class="market-fill"
-                                    id="marketFill"
-                                ></div>
-                            </div>
+                                class="market-fill"
+                                id="marketFill"
+                            ></div>
                         </div>
 
                     </div>
@@ -687,6 +709,7 @@
             </div>
 
             <!-- LIVE CHART -->
+
             <div class="card chart-card">
 
                 <div class="card-header">
@@ -740,9 +763,11 @@
         </section>
 
         <!-- CONTRACT INFORMATION -->
+
         <section class="contract-strip">
 
             <div class="contract-box">
+
                 <div class="contract-label">
                     BTC Index
                 </div>
@@ -753,9 +778,11 @@
                 >
                     --
                 </div>
+
             </div>
 
             <div class="contract-box">
+
                 <div class="contract-label">
                     Strike
                 </div>
@@ -766,9 +793,11 @@
                 >
                     --
                 </div>
+
             </div>
 
             <div class="contract-box">
+
                 <div class="contract-label">
                     Contract
                 </div>
@@ -779,9 +808,11 @@
                 >
                     --
                 </div>
+
             </div>
 
             <div class="contract-box">
+
                 <div class="contract-label">
                     Expiry
                 </div>
@@ -792,20 +823,25 @@
                 >
                     --
                 </div>
+
             </div>
 
         </section>
 
         <!-- RECORDS + NEWS -->
+
         <section class="bottom-grid">
 
             <!-- TODAY -->
+
             <div class="card record-card">
 
                 <div class="card-header">
+
                     <div class="card-title">
                         Today's Record
                     </div>
+
                 </div>
 
                 <div class="card-body">
@@ -824,6 +860,7 @@
                     <div class="record-stats">
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="todayAccuracy"
@@ -834,9 +871,11 @@
                             <div class="stat-label">
                                 Accuracy
                             </div>
+
                         </div>
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="todayRounds"
@@ -847,9 +886,11 @@
                             <div class="stat-label">
                                 Rounds
                             </div>
+
                         </div>
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="todayPasses"
@@ -860,15 +901,21 @@
                             <div class="stat-label">
                                 Passes
                             </div>
+
                         </div>
 
                     </div>
 
                     <div class="streak">
-                        <span>Current streak:</span>
+
+                        <span>
+                            Current streak:
+                        </span>
+
                         <strong id="todayStreak">
                             --
                         </strong>
+
                     </div>
 
                 </div>
@@ -876,12 +923,15 @@
             </div>
 
             <!-- WEEKLY -->
+
             <div class="card record-card">
 
                 <div class="card-header">
+
                     <div class="card-title">
                         Weekly Record
                     </div>
+
                 </div>
 
                 <div class="card-body">
@@ -900,6 +950,7 @@
                     <div class="record-stats">
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="weeklyAccuracy"
@@ -910,9 +961,11 @@
                             <div class="stat-label">
                                 Accuracy
                             </div>
+
                         </div>
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="weeklyRounds"
@@ -923,9 +976,11 @@
                             <div class="stat-label">
                                 Rounds
                             </div>
+
                         </div>
 
                         <div class="stat">
+
                             <div
                                 class="stat-value"
                                 id="weeklyPasses"
@@ -936,15 +991,21 @@
                             <div class="stat-label">
                                 Passes
                             </div>
+
                         </div>
 
                     </div>
 
                     <div class="streak">
-                        <span>Current streak:</span>
+
+                        <span>
+                            Current streak:
+                        </span>
+
                         <strong id="weeklyStreak">
                             --
                         </strong>
+
                     </div>
 
                 </div>
@@ -952,6 +1013,7 @@
             </div>
 
             <!-- NEWS -->
+
             <div class="card news-card">
 
                 <div class="card-header">
@@ -1001,8 +1063,6 @@
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-        const socket = io();
-
         const state = {
             timeframe: "1m",
             priceHistory: [],
@@ -1010,88 +1070,182 @@
         };
 
         const elements = {
-            statusText: document.getElementById("statusText"),
-            statusDot: document.getElementById("statusDot"),
+            statusText:
+                document.getElementById("statusText"),
 
-            phaseText: document.getElementById("phaseText"),
-            predictionCall: document.getElementById("predictionCall"),
+            statusDot:
+                document.getElementById("statusDot"),
+
+            phaseText:
+                document.getElementById("phaseText"),
+
+            predictionCall:
+                document.getElementById("predictionCall"),
+
             predictionProbability:
-                document.getElementById("predictionProbability"),
+                document.getElementById(
+                    "predictionProbability"
+                ),
+
             predictionConfidence:
-                document.getElementById("predictionConfidence"),
-            roundId: document.getElementById("roundId"),
+                document.getElementById(
+                    "predictionConfidence"
+                ),
+
+            roundId:
+                document.getElementById("roundId"),
 
             distanceValue:
-                document.getElementById("distanceValue"),
+                document.getElementById(
+                    "distanceValue"
+                ),
+
             momentum1m:
                 document.getElementById("momentum1m"),
+
             momentum3m:
                 document.getElementById("momentum3m"),
+
             momentum5m:
                 document.getElementById("momentum5m"),
+
             tradeFlow:
                 document.getElementById("tradeFlow"),
+
             obi:
                 document.getElementById("obi"),
+
             vwap:
                 document.getElementById("vwap"),
+
             volatility:
-                document.getElementById("volatility"),
+                document.getElementById(
+                    "volatility"
+                ),
+
             dataQuality:
-                document.getElementById("dataQuality"),
+                document.getElementById(
+                    "dataQuality"
+                ),
+
             modelProbability:
-                document.getElementById("modelProbability"),
+                document.getElementById(
+                    "modelProbability"
+                ),
+
             marketProbabilityText:
                 document.getElementById(
                     "marketProbabilityText"
                 ),
+
+            marketBar:
+                document.getElementById(
+                    "marketBar"
+                ),
+
             marketFill:
-                document.getElementById("marketFill"),
+                document.getElementById(
+                    "marketFill"
+                ),
 
             btcPrice:
-                document.getElementById("btcPrice"),
+                document.getElementById(
+                    "btcPrice"
+                ),
+
             strikePrice:
-                document.getElementById("strikePrice"),
+                document.getElementById(
+                    "strikePrice"
+                ),
+
             contractSymbol:
-                document.getElementById("contractSymbol"),
+                document.getElementById(
+                    "contractSymbol"
+                ),
+
             expiry:
-                document.getElementById("expiry"),
+                document.getElementById(
+                    "expiry"
+                ),
 
             todayRecord:
-                document.getElementById("todayRecord"),
+                document.getElementById(
+                    "todayRecord"
+                ),
+
             todayAccuracy:
-                document.getElementById("todayAccuracy"),
+                document.getElementById(
+                    "todayAccuracy"
+                ),
+
             todayRounds:
-                document.getElementById("todayRounds"),
+                document.getElementById(
+                    "todayRounds"
+                ),
+
             todayPasses:
-                document.getElementById("todayPasses"),
+                document.getElementById(
+                    "todayPasses"
+                ),
+
             todayStreak:
-                document.getElementById("todayStreak"),
+                document.getElementById(
+                    "todayStreak"
+                ),
 
             weeklyRecord:
-                document.getElementById("weeklyRecord"),
-            weeklyAccuracy:
-                document.getElementById("weeklyAccuracy"),
-            weeklyRounds:
-                document.getElementById("weeklyRounds"),
-            weeklyPasses:
-                document.getElementById("weeklyPasses"),
-            weeklyStreak:
-                document.getElementById("weeklyStreak"),
+                document.getElementById(
+                    "weeklyRecord"
+                ),
 
-            chart: document.getElementById("btcChart"),
+            weeklyAccuracy:
+                document.getElementById(
+                    "weeklyAccuracy"
+                ),
+
+            weeklyRounds:
+                document.getElementById(
+                    "weeklyRounds"
+                ),
+
+            weeklyPasses:
+                document.getElementById(
+                    "weeklyPasses"
+                ),
+
+            weeklyStreak:
+                document.getElementById(
+                    "weeklyStreak"
+                ),
+
+            chart:
+                document.getElementById(
+                    "btcChart"
+                ),
+
             chartEmpty:
-                document.getElementById("chartEmpty")
+                document.getElementById(
+                    "chartEmpty"
+                )
         };
 
-        const chartContext =
-            elements.chart.getContext("2d");
+        let chartContext = null;
 
-        function number(value, decimals = 2) {
+        if (elements.chart) {
+            chartContext =
+                elements.chart.getContext("2d");
+        }
+
+        function number(
+            value,
+            decimals = 2
+        ) {
             if (
                 value === null ||
                 value === undefined ||
-                !Number.isFinite(Number(value))
+                !Number.isFinite(
+                    Number(value)
+                )
             ) {
                 return "--";
             }
@@ -1099,46 +1253,94 @@
             return Number(value).toLocaleString(
                 undefined,
                 {
-                    minimumFractionDigits: decimals,
-                    maximumFractionDigits: decimals
+                    minimumFractionDigits:
+                        decimals,
+
+                    maximumFractionDigits:
+                        decimals
                 }
             );
         }
 
-        function percent(value) {
+        function percentFromBackend(
+            value
+        ) {
             if (
                 value === null ||
                 value === undefined ||
-                !Number.isFinite(Number(value))
+                !Number.isFinite(
+                    Number(value)
+                )
             ) {
                 return "--";
             }
 
-            return `${(Number(value) * 100).toFixed(1)}%`;
+            return `${Number(value).toFixed(1)}%`;
         }
 
-        function signedPercent(value) {
+        function signedNumber(
+            value,
+            decimals = 2
+        ) {
             if (
                 value === null ||
                 value === undefined ||
-                !Number.isFinite(Number(value))
+                !Number.isFinite(
+                    Number(value)
+                )
             ) {
                 return "--";
             }
 
-            const n = Number(value) * 100;
+            const numberValue =
+                Number(value);
 
-            return `${n >= 0 ? "+" : ""}${n.toFixed(3)}%`;
+            return (
+                `${numberValue >= 0 ? "+" : ""}` +
+                `${number(
+                    numberValue,
+                    decimals
+                )}`
+            );
         }
 
-        function formatTime(timestamp) {
+        function signedPercentFromDecimal(
+            value
+        ) {
+            if (
+                value === null ||
+                value === undefined ||
+                !Number.isFinite(
+                    Number(value)
+                )
+            ) {
+                return "--";
+            }
+
+            const n =
+                Number(value) * 100;
+
+            return (
+                `${n >= 0 ? "+" : ""}` +
+                `${n.toFixed(3)}%`
+            );
+        }
+
+        function formatTime(
+            timestamp
+        ) {
             if (!timestamp) {
                 return "--";
             }
 
-            const date = new Date(timestamp);
+            const date =
+                new Date(timestamp);
 
-            if (Number.isNaN(date.getTime())) {
+            if (
+                Number.isNaN(
+                    date.getTime()
+                )
+            ) {
                 return "--";
             }
 
@@ -1152,14 +1354,21 @@
             );
         }
 
-        function formatExpiry(timestamp) {
+        function formatExpiry(
+            timestamp
+        ) {
             if (!timestamp) {
                 return "--";
             }
 
-            const date = new Date(timestamp);
+            const date =
+                new Date(timestamp);
 
-            if (Number.isNaN(date.getTime())) {
+            if (
+                Number.isNaN(
+                    date.getTime()
+                )
+            ) {
                 return "--";
             }
 
@@ -1173,7 +1382,9 @@
             );
         }
 
-        function setConnection(connected) {
+        function setConnection(
+            connected
+        ) {
             if (connected) {
                 elements.statusText.textContent =
                     "Live";
@@ -1195,9 +1406,14 @@
             }
         }
 
-        function updatePrediction(data) {
+        function updatePrediction(
+            data
+        ) {
             const forecast =
-                String(data.forecast || "PASS").toUpperCase();
+                String(
+                    data.forecast ||
+                    "PASS"
+                ).toUpperCase();
 
             elements.predictionCall.textContent =
                 forecast;
@@ -1207,191 +1423,332 @@
                 forecast.toLowerCase();
 
             elements.predictionProbability.textContent =
-                percent(data.probability);
+                percentFromBackend(
+                    data.forecastProbability
+                );
 
             elements.predictionConfidence.textContent =
-                `Confidence ${percent(data.confidence)}`;
+                `Confidence ${percentFromBackend(
+                    data.forecastConfidence
+                )}`;
 
             elements.phaseText.textContent =
-                data.phase || "Waiting";
+                data.phase ||
+                "WAITING";
 
             elements.roundId.textContent =
-                data.roundId
-                    ? `Round ${data.roundId}`
+                data.activeRoundId
+                    ? `Round ${data.activeRoundId}`
                     : "Waiting for contract...";
         }
 
-        function updateReasons(data) {
+        function updateReasons(
+            data
+        ) {
             elements.distanceValue.textContent =
-                data.distancePct !== undefined
-                    ? signedPercent(data.distancePct)
-                    : number(data.distance);
+                data.strikeDistancePct !== null &&
+                data.strikeDistancePct !== undefined
+                    ? signedNumber(
+                          data.strikeDistance,
+                          2
+                      ) +
+                      ` (${signedNumber(
+                          data.strikeDistancePct,
+                          3
+                      )}%)`
+                    : "--";
 
             elements.momentum1m.textContent =
-                signedPercent(data.momentum1m);
+                signedNumber(
+                    data.momentum1m,
+                    2
+                );
 
             elements.momentum3m.textContent =
-                signedPercent(data.momentum3m);
+                signedNumber(
+                    data.momentum3m,
+                    2
+                );
 
             elements.momentum5m.textContent =
-                signedPercent(data.momentum5m);
+                signedNumber(
+                    data.momentum5m,
+                    2
+                );
 
             elements.tradeFlow.textContent =
-                number(data.tradeFlow, 3);
+                number(
+                    data.tradeFlow,
+                    3
+                );
 
             elements.obi.textContent =
-                number(data.obi, 3);
+                number(
+                    data.orderBookImbalance,
+                    3
+                );
 
             elements.vwap.textContent =
-                data.vwap
-                    ? `$${number(data.vwap, 2)}`
+                data.vwap !== null &&
+                data.vwap !== undefined
+                    ? `$${number(
+                          data.vwap,
+                          2
+                      )}`
                     : "--";
 
             elements.volatility.textContent =
-                number(data.volatility1m, 4);
+                number(
+                    data.volatility1m,
+                    2
+                );
 
             elements.dataQuality.textContent =
+                data.dataQuality !== null &&
                 data.dataQuality !== undefined
                     ? `${number(
-                        Number(data.dataQuality) * 100,
-                        0
-                    )}%`
+                          data.dataQuality,
+                          0
+                      )}%`
                     : "--";
 
             elements.modelProbability.textContent =
-                percent(data.probability);
+                percentFromBackend(
+                    data.forecastProbability
+                );
 
             elements.marketProbabilityText.textContent =
-                percent(data.marketProbability);
+                percentFromBackend(
+                    data.marketProbability
+                );
 
             if (
+                data.marketProbability !== null &&
                 data.marketProbability !== undefined &&
                 Number.isFinite(
-                    Number(data.marketProbability)
+                    Number(
+                        data.marketProbability
+                    )
                 )
             ) {
-                elements.marketFill.style.width =
+                elements.marketBar.style.width =
                     `${Math.max(
                         0,
                         Math.min(
                             100,
-                            Number(data.marketProbability) * 100
+                            Number(
+                                data.marketProbability
+                            )
                         )
                     )}%`;
             }
         }
 
-        function updateContract(data) {
+        function updateContract(
+            data
+        ) {
             elements.btcPrice.textContent =
-                data.btcPrice
-                    ? `$${number(data.btcPrice, 2)}`
-                    : "--";
+                data.btcIndexPrice !== null &&
+                data.btcIndexPrice !== undefined
+                    ? `$${number(
+                          data.btcIndexPrice,
+                          2
+                      )}`
+                    : data.btcPrice !== null &&
+                      data.btcPrice !== undefined
+                        ? `$${number(
+                              data.btcPrice,
+                              2
+                          )}`
+                        : "--";
 
             elements.strikePrice.textContent =
-                data.strike
-                    ? `$${number(data.strike, 2)}`
+                data.strikePrice !== null &&
+                data.strikePrice !== undefined
+                    ? `$${number(
+                          data.strikePrice,
+                          2
+                      )}`
                     : "--";
 
             elements.contractSymbol.textContent =
-                data.contractSymbol || "--";
+                data.contractSymbol ||
+                "--";
 
             elements.expiry.textContent =
-                formatExpiry(data.expiry);
+                formatExpiry(
+                    data.contractExpiry
+                );
         }
 
-        function updateRecords(data) {
+        function updateRecords(
+            data
+        ) {
             const performance =
                 data.performance || {};
 
-            const today =
-                performance.today || {};
+            const wins =
+                Number(
+                    performance.wins || 0
+                );
 
-            const weekly =
-                performance.weekly || {};
+            const losses =
+                Number(
+                    performance.losses || 0
+                );
 
-            const todayWins =
-                Number(today.wins || 0);
-
-            const todayLosses =
-                Number(today.losses || 0);
-
-            const todayRounds =
-                Number(today.rounds || 0);
-
-            const todayPasses =
-                Number(today.passes || 0);
-
-            const weeklyWins =
-                Number(weekly.wins || 0);
-
-            const weeklyLosses =
-                Number(weekly.losses || 0);
-
-            const weeklyRounds =
-                Number(weekly.rounds || 0);
-
-            const weeklyPasses =
-                Number(weekly.passes || 0);
+            const total =
+                Number(
+                    performance.total || 0
+                );
 
             elements.todayRecord.textContent =
-                `${todayWins} - ${todayLosses}`;
-
-            elements.todayRounds.textContent =
-                todayRounds;
-
-            elements.todayPasses.textContent =
-                todayPasses;
-
-            elements.todayAccuracy.textContent =
-                today.accuracy !== undefined
-                    ? percent(today.accuracy)
-                    : "--%";
-
-            elements.todayStreak.textContent =
-                today.streak !== undefined
-                    ? today.streak
-                    : "--";
+                `${wins} - ${losses}`;
 
             elements.weeklyRecord.textContent =
-                `${weeklyWins} - ${weeklyLosses}`;
+                `${wins} - ${losses}`;
+
+            elements.todayRounds.textContent =
+                total;
 
             elements.weeklyRounds.textContent =
-                weeklyRounds;
+                total;
+
+            elements.todayPasses.textContent =
+                completedPasses(
+                    data.recentRounds
+                );
 
             elements.weeklyPasses.textContent =
-                weeklyPasses;
+                completedPasses(
+                    data.recentRounds
+                );
 
-            elements.weeklyAccuracy.textContent =
-                weekly.accuracy !== undefined
-                    ? percent(weekly.accuracy)
+            elements.todayAccuracy.textContent =
+                performance.accuracy !== null &&
+                performance.accuracy !== undefined
+                    ? `${Number(
+                          performance.accuracy
+                      ).toFixed(1)}%`
                     : "--%";
 
+            elements.weeklyAccuracy.textContent =
+                performance.accuracy !== null &&
+                performance.accuracy !== undefined
+                    ? `${Number(
+                          performance.accuracy
+                      ).toFixed(1)}%`
+                    : "--%";
+
+            const streak =
+                calculateStreak(
+                    data.recentRounds
+                );
+
+            elements.todayStreak.textContent =
+                streak;
+
             elements.weeklyStreak.textContent =
-                weekly.streak !== undefined
-                    ? weekly.streak
-                    : "--";
+                streak;
         }
 
-        function addPricePoint(data) {
+        function completedPasses(
+            rounds
+        ) {
+            if (!Array.isArray(rounds)) {
+                return 0;
+            }
+
+            return rounds.filter(
+                round =>
+                    String(
+                        round.forecast ||
+                        ""
+                    ).toUpperCase() ===
+                    "PASS"
+            ).length;
+        }
+
+        function calculateStreak(
+            rounds
+        ) {
+            if (!Array.isArray(rounds) ||
+                rounds.length === 0
+            ) {
+                return "--";
+            }
+
+            const resolved =
+                rounds.filter(
+                    round =>
+                        round.result ===
+                            "WIN" ||
+                        round.result ===
+                            "LOSS"
+                );
+
+            if (!resolved.length) {
+                return "--";
+            }
+
+            const first =
+                resolved[0].result;
+
+            let count = 0;
+
+            for (
+                const round of resolved
+            ) {
+                if (
+                    round.result ===
+                    first
+                ) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+
+            return `${count} ${first}`;
+        }
+
+        function addPricePoint(
+            data
+        ) {
             if (
                 !data ||
-                !data.btcPrice ||
+                data.btcPrice === null ||
+                data.btcPrice === undefined ||
                 !Number.isFinite(
-                    Number(data.btcPrice)
+                    Number(
+                        data.btcPrice
+                    )
                 )
             ) {
                 return;
             }
 
             const timestamp =
-                data.timestamp
-                    ? new Date(data.timestamp).getTime()
+                data.lastUpdate
+                    ? Number(
+                          data.lastUpdate
+                      )
                     : Date.now();
+
+            const strike =
+                data.strikePrice !== null &&
+                data.strikePrice !== undefined
+                    ? Number(
+                          data.strikePrice
+                      )
+                    : null;
 
             state.priceHistory.push({
                 time: timestamp,
-                price: Number(data.btcPrice),
-                strike: Number(data.strike)
+                price: Number(
+                    data.btcPrice
+                ),
+                strike
             });
 
             const cutoff =
@@ -1400,89 +1757,145 @@
 
             state.priceHistory =
                 state.priceHistory.filter(
-                    point => point.time >= cutoff
+                    point =>
+                        point.time >=
+                        cutoff
                 );
         }
 
-        function aggregatePoints(minutes) {
-            const now = Date.now();
+        function aggregatePoints(
+            minutes
+        ) {
+            const now =
+                Date.now();
 
             const cutoff =
                 now -
-                minutes * 60 * 1000;
+                minutes *
+                    60 *
+                    1000;
 
             const points =
                 state.priceHistory.filter(
-                    point => point.time >= cutoff
+                    point =>
+                        point.time >=
+                        cutoff
                 );
 
-            if (minutes === 1) {
+            if (
+                minutes === 1
+            ) {
                 return points;
             }
 
-            if (points.length === 0) {
+            if (
+                points.length === 0
+            ) {
                 return [];
             }
 
             const bucketSize =
-                minutes * 60 * 1000;
+                minutes *
+                60 *
+                1000;
 
-            const buckets = new Map();
+            const buckets =
+                new Map();
 
-            for (const point of points) {
+            for (
+                const point of points
+            ) {
                 const bucket =
                     Math.floor(
-                        point.time / bucketSize
-                    ) * bucketSize;
+                        point.time /
+                            bucketSize
+                    ) *
+                    bucketSize;
 
-                if (!buckets.has(bucket)) {
-                    buckets.set(bucket, []);
+                if (
+                    !buckets.has(
+                        bucket
+                    )
+                ) {
+                    buckets.set(
+                        bucket,
+                        []
+                    );
                 }
 
-                buckets.get(bucket).push(point);
+                buckets
+                    .get(bucket)
+                    .push(point);
             }
 
             return Array.from(
                 buckets.entries()
             )
-                .sort((a, b) => a[0] - b[0])
-                .map(([time, bucket]) => {
-                    const prices =
-                        bucket.map(
-                            point => point.price
-                        );
-
-                    const strikes =
-                        bucket
-                            .map(point => point.strike)
-                            .filter(
-                                value =>
-                                    Number.isFinite(value)
+                .sort(
+                    (a, b) =>
+                        a[0] -
+                        b[0]
+                )
+                .map(
+                    ([time, bucket]) => {
+                        const prices =
+                            bucket.map(
+                                point =>
+                                    point.price
                             );
 
-                    const average =
-                        prices.reduce(
-                            (sum, value) =>
-                                sum + value,
+                        const strikes =
+                            bucket
+                                .map(
+                                    point =>
+                                        point.strike
+                                )
+                                .filter(
+                                    value =>
+                                        Number.isFinite(
+                                            value
+                                        )
+                                );
+
+                        const average =
+                            prices.reduce(
+                                (
+                                    sum,
+                                    value
+                                ) =>
+                                    sum +
+                                    value,
+                                0
+                            ) /
+                            prices.length;
+
+                        const strike =
+                            strikes.length >
                             0
-                        ) / prices.length;
+                                ? strikes[
+                                      strikes.length -
+                                          1
+                                  ]
+                                : null;
 
-                    const strike =
-                        strikes.length > 0
-                            ? strikes[
-                                strikes.length - 1
-                            ]
-                            : null;
-
-                    return {
-                        time,
-                        price: average,
-                        strike
-                    };
-                });
+                        return {
+                            time,
+                            price:
+                                average,
+                            strike
+                        };
+                    }
+                );
         }
 
         function drawChart() {
+            if (
+                !elements.chart ||
+                !chartContext
+            ) {
+                return;
+            }
+
             const canvas =
                 elements.chart;
 
@@ -1490,13 +1903,15 @@
                 canvas.getBoundingClientRect();
 
             const dpr =
-                window.devicePixelRatio || 1;
+                window.devicePixelRatio ||
+                1;
 
             canvas.width =
                 Math.max(
                     1,
                     Math.floor(
-                        rect.width * dpr
+                        rect.width *
+                            dpr
                     )
                 );
 
@@ -1504,7 +1919,8 @@
                 Math.max(
                     1,
                     Math.floor(
-                        rect.height * dpr
+                        rect.height *
+                            dpr
                     )
                 );
 
@@ -1531,16 +1947,22 @@
             );
 
             const minutes =
-                state.timeframe === "1m"
+                state.timeframe ===
+                "1m"
                     ? 1
-                    : state.timeframe === "5m"
+                    : state.timeframe ===
+                      "5m"
                         ? 5
                         : 15;
 
             const points =
-                aggregatePoints(minutes);
+                aggregatePoints(
+                    minutes
+                );
 
-            if (points.length < 2) {
+            if (
+                points.length < 2
+            ) {
                 elements.chartEmpty.style.display =
                     "flex";
 
@@ -1552,33 +1974,48 @@
 
             const prices =
                 points.map(
-                    point => point.price
+                    point =>
+                        point.price
                 );
 
             const strikes =
                 points
-                    .map(point => point.strike)
+                    .map(
+                        point =>
+                            point.strike
+                    )
                     .filter(
                         value =>
-                            Number.isFinite(value)
+                            Number.isFinite(
+                                value
+                            )
                     );
 
             const allValues =
-                prices.concat(strikes);
+                prices.concat(
+                    strikes
+                );
 
             let min =
-                Math.min(...allValues);
+                Math.min(
+                    ...allValues
+                );
 
             let max =
-                Math.max(...allValues);
+                Math.max(
+                    ...allValues
+                );
 
-            if (min === max) {
+            if (
+                min === max
+            ) {
                 min -= 1;
                 max += 1;
             }
 
             const padding =
-                (max - min) * 0.08;
+                (max - min) *
+                0.08;
 
             min -= padding;
             max += padding;
@@ -1589,42 +2026,61 @@
             const bottom = 28;
 
             const chartWidth =
-                width - left - right;
+                width -
+                left -
+                right;
 
             const chartHeight =
-                height - top - bottom;
+                height -
+                top -
+                bottom;
 
-            function xPosition(index) {
-                if (points.length <= 1) {
+            function xPosition(
+                index
+            ) {
+                if (
+                    points.length <=
+                    1
+                ) {
                     return left;
                 }
 
                 return (
                     left +
                     (index /
-                        (points.length - 1)) *
-                    chartWidth
+                        (points.length -
+                            1)) *
+                        chartWidth
                 );
             }
 
-            function yPosition(value) {
+            function yPosition(
+                value
+            ) {
                 return (
                     top +
                     ((max - value) /
                         (max - min)) *
-                    chartHeight
+                        chartHeight
                 );
             }
 
             chartContext.strokeStyle =
                 "#1d222d";
 
-            chartContext.lineWidth = 1;
+            chartContext.lineWidth =
+                1;
 
-            for (let i = 0; i <= 4; i++) {
+            for (
+                let i = 0;
+                i <= 4;
+                i++
+            ) {
                 const y =
                     top +
-                    (chartHeight / 4) * i;
+                    (chartHeight /
+                        4) *
+                        i;
 
                 chartContext.beginPath();
 
@@ -1634,7 +2090,8 @@
                 );
 
                 chartContext.lineTo(
-                    width - right,
+                    width -
+                        right,
                     y
                 );
 
@@ -1642,7 +2099,10 @@
 
                 const value =
                     max -
-                    ((max - min) / 4) * i;
+                    ((max -
+                        min) /
+                        4) *
+                        i;
 
                 chartContext.fillStyle =
                     "#626b7e";
@@ -1654,7 +2114,10 @@
                     "right";
 
                 chartContext.fillText(
-                    `$${number(value, 0)}`,
+                    `$${number(
+                        value,
+                        0
+                    )}`,
                     left - 8,
                     y + 4
                 );
@@ -1663,16 +2126,23 @@
             chartContext.beginPath();
 
             points.forEach(
-                (point, index) => {
+                (
+                    point,
+                    index
+                ) => {
                     const x =
-                        xPosition(index);
+                        xPosition(
+                            index
+                        );
 
                     const y =
                         yPosition(
                             point.price
                         );
 
-                    if (index === 0) {
+                    if (
+                        index === 0
+                    ) {
                         chartContext.moveTo(
                             x,
                             y
@@ -1689,7 +2159,8 @@
             chartContext.strokeStyle =
                 "#dce1e8";
 
-            chartContext.lineWidth = 2;
+            chartContext.lineWidth =
+                2;
 
             chartContext.stroke();
 
@@ -1704,7 +2175,9 @@
                             )
                     );
 
-            if (latestStrike) {
+            if (
+                latestStrike
+            ) {
                 const strikeY =
                     yPosition(
                         latestStrike.strike
@@ -1712,10 +2185,12 @@
 
                 chartContext.beginPath();
 
-                chartContext.setLineDash([
-                    7,
-                    6
-                ]);
+                chartContext.setLineDash(
+                    [
+                        7,
+                        6
+                    ]
+                );
 
                 chartContext.moveTo(
                     left,
@@ -1723,18 +2198,22 @@
                 );
 
                 chartContext.lineTo(
-                    width - right,
+                    width -
+                        right,
                     strikeY
                 );
 
                 chartContext.strokeStyle =
                     "#7f8cff";
 
-                chartContext.lineWidth = 1;
+                chartContext.lineWidth =
+                    1;
 
                 chartContext.stroke();
 
-                chartContext.setLineDash([]);
+                chartContext.setLineDash(
+                    []
+                );
 
                 chartContext.fillStyle =
                     "#7f8cff";
@@ -1756,7 +2235,9 @@
             }
 
             const latest =
-                points[points.length - 1];
+                points[
+                    points.length - 1
+                ];
 
             const latestX =
                 xPosition(
@@ -1793,13 +2274,18 @@
                 "right";
 
             chartContext.fillText(
-                formatTime(latest.time),
-                width - right,
+                formatTime(
+                    latest.time
+                ),
+                width -
+                    right,
                 height - 8
             );
         }
 
-        function setTimeframe(timeframe) {
+        function setTimeframe(
+            timeframe
+        ) {
             state.timeframe =
                 timeframe;
 
@@ -1807,13 +2293,16 @@
                 .querySelectorAll(
                     ".time-button"
                 )
-                .forEach(button => {
-                    button.classList.toggle(
-                        "active",
-                        button.dataset.timeframe ===
-                        timeframe
-                    );
-                });
+                .forEach(
+                    button => {
+                        button.classList.toggle(
+                            "active",
+                            button.dataset
+                                .timeframe ===
+                                timeframe
+                        );
+                    }
+                );
 
             drawChart();
         }
@@ -1822,55 +2311,118 @@
             .querySelectorAll(
                 ".time-button"
             )
-            .forEach(button => {
-                button.addEventListener(
-                    "click",
-                    () => {
-                        setTimeframe(
-                            button.dataset.timeframe
-                        );
-                    }
-                );
-            });
+            .forEach(
+                button => {
+                    button.addEventListener(
+                        "click",
+                        () => {
+                            setTimeframe(
+                                button.dataset
+                                    .timeframe
+                            );
+                        }
+                    );
+                }
+            );
 
         window.addEventListener(
             "resize",
             drawChart
         );
 
-        socket.on(
-            "connect",
-            () => {
-                setConnection(true);
+        function handleUpdate(
+            data
+        ) {
+            if (!data) {
+                return;
             }
-        );
 
-        socket.on(
-            "disconnect",
-            () => {
-                setConnection(false);
+            state.latest =
+                data;
+
+            updatePrediction(
+                data
+            );
+
+            updateReasons(
+                data
+            );
+
+            updateContract(
+                data
+            );
+
+            updateRecords(
+                data
+            );
+
+            addPricePoint(
+                data
+            );
+
+            drawChart();
+        }
+
+        function connectSocket() {
+            if (
+                typeof io !==
+                "function"
+            ) {
+                console.error(
+                    "Socket.IO client was not loaded."
+                );
+
+                setConnection(
+                    false
+                );
+
+                return;
             }
-        );
 
-        socket.on(
-            "odin:update",
-            data => {
-                if (!data) {
-                    return;
+            const socket =
+                io();
+
+            socket.on(
+                "connect",
+                () => {
+                    setConnection(
+                        true
+                    );
                 }
+            );
 
-                state.latest =
-                    data;
+            socket.on(
+                "disconnect",
+                () => {
+                    setConnection(
+                        false
+                    );
+                }
+            );
 
-                updatePrediction(data);
-                updateReasons(data);
-                updateContract(data);
-                updateRecords(data);
+            socket.on(
+                "connect_error",
+                error => {
+                    console.error(
+                        "Socket connection error:",
+                        error
+                    );
 
-                addPricePoint(data);
-                drawChart();
-            }
-        );
+                    setConnection(
+                        false
+                    );
+                }
+            );
+
+            socket.on(
+                "odin:update",
+                data => {
+                    handleUpdate(
+                        data
+                    );
+                }
+            );
+        }
 
         async function loadInitialStatus() {
             try {
@@ -1879,67 +2431,25 @@
                         "/api/status"
                     );
 
-                if (!response.ok) {
+                if (
+                    !response.ok
+                ) {
                     throw new Error(
-                        "Status request failed"
+                        `Status request failed: ${response.status}`
                     );
                 }
 
                 const data =
                     await response.json();
 
-                if (data) {
-                    state.latest =
-                        data;
-
-                    updatePrediction(data);
-                    updateReasons(data);
-                    updateContract(data);
-                    updateRecords(data);
-
-                    if (
-                        Array.isArray(
-                            data.priceHistory
-                        )
-                    ) {
-                        state.priceHistory =
-                            data.priceHistory
-                                .map(point => ({
-                                    time:
-                                        new Date(
-                                            point.time ||
-                                            point.timestamp
-                                        ).getTime(),
-                                    price:
-                                        Number(
-                                            point.price
-                                        ),
-                                    strike:
-                                        Number(
-                                            point.strike
-                                        )
-                                }))
-                                .filter(
-                                    point =>
-                                        Number.isFinite(
-                                            point.time
-                                        ) &&
-                                        Number.isFinite(
-                                            point.price
-                                        )
-                                );
-                    }
-
-                    if (
-                        Number.isFinite(
-                            Number(data.btcPrice)
-                        )
-                    ) {
-                        addPricePoint(data);
-                    }
-
-                    drawChart();
+                if (!data) {
+                    return;
                 }
+
+                handleUpdate(
+                    data
+                );
+
             } catch (error) {
                 console.error(
                     "Failed to load Odin status:",
@@ -1955,7 +2465,9 @@
                         "/api/history"
                     );
 
-                if (!response.ok) {
+                if (
+                    !response.ok
+                ) {
                     return;
                 }
 
@@ -1963,54 +2475,63 @@
                     await response.json();
 
                 if (
-                    Array.isArray(data)
+                    !data ||
+                    !Array.isArray(
+                        data.rounds
+                    )
                 ) {
-                    for (
-                        const item of data
-                    ) {
-                        if (
-                            item.btcPrice ||
-                            item.price
-                        ) {
-                            const price =
-                                Number(
-                                    item.btcPrice ||
-                                    item.price
-                                );
+                    return;
+                }
 
-                            if (
-                                Number.isFinite(
-                                    price
-                                )
-                            ) {
-                                state.priceHistory.push(
-                                    {
-                                        time:
-                                            new Date(
-                                                item.timestamp ||
-                                                item.time
-                                            ).getTime(),
-                                        price,
-                                        strike:
-                                            Number(
-                                                item.strike
-                                            )
-                                    }
-                                );
-                            }
+                for (
+                    const item of data.rounds
+                ) {
+                    if (
+                        item.collectionStartPrice !==
+                        null &&
+                        item.collectionStartPrice !==
+                        undefined
+                    ) {
+                        const price =
+                            Number(
+                                item.collectionStartPrice
+                            );
+
+                        if (
+                            Number.isFinite(
+                                price
+                            )
+                        ) {
+                            state.priceHistory.push(
+                                {
+                                    time:
+                                        Number(
+                                            item.startedAt
+                                        ),
+                                    price,
+                                    strike:
+                                        Number(
+                                            item.strike
+                                        )
+                                }
+                            );
                         }
                     }
-
-                    state.priceHistory =
-                        state.priceHistory.filter(
-                            point =>
-                                Number.isFinite(
-                                    point.time
-                                )
-                        );
-
-                    drawChart();
                 }
+
+                state.priceHistory =
+                    state.priceHistory.filter(
+                        point =>
+                            Number.isFinite(
+                                point.time
+                            ) &&
+                            Number.isFinite(
+                                point.price
+                            )
+                    );
+
+                drawChart();
+
             } catch (error) {
                 console.error(
                     "Failed to load history:",
@@ -2019,8 +2540,17 @@
             }
         }
 
+        setConnection(
+            false
+        );
+
+        connectSocket();
+
         loadInitialStatus();
+
         loadHistory();
+
+        drawChart();
     </script>
 </body>
 </html>
