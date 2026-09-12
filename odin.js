@@ -15,7 +15,10 @@ app.use(express.static(path.join(__dirname, "public")));
 const PORT = process.env.PORT || 10000;
 
 const CRYPTO_API =
-    "https://api.crypto.com/exchange/v1/public";
+    "https://api.crypto.com/exchange/v1";
+
+const CRYPTO_DCM_API =
+    "https://api.crypto.com/dcm/v1";
 
 const CONFIG = {
     underlying: "BTC",
@@ -221,9 +224,13 @@ function createRoundId(expiry) {
     return `BTC-${expiry}`;
 }
 
-async function cryptoRequest(endpoint, params = {}) {
+async function cryptoRequest(
+    endpoint,
+    params = {},
+    apiRoot = CRYPTO_API
+) {
     const url = new URL(
-        `${CRYPTO_API}/${endpoint}`
+        `${apiRoot}/${endpoint}`
     );
 
     for (const [key, value] of Object.entries(params)) {
@@ -346,15 +353,50 @@ async function getBTCTrades() {
 }
 
 async function getInstruments() {
-    const result = await cryptoRequest(
-        "public/get-instruments",
-        {
+    let allInstruments = [];
+    let cursor = null;
+
+    for (let page = 0; page < 10; page++) {
+        const params = {
             inst_type: "BINARY_OPTION",
             limit: 1000
-        }
-    );
+        };
 
-    return result?.data || [];
+        if (cursor) {
+            params.cursor = cursor;
+        }
+
+        const result =
+            await cryptoRequest(
+                "public/get-instruments",
+                params,
+                CRYPTO_DCM_API
+            );
+
+        const pageData =
+            Array.isArray(result?.data)
+                ? result.data
+                : [];
+
+        allInstruments =
+            allInstruments.concat(
+                pageData
+            );
+
+        const nextCursor =
+            result?.next_cursor;
+
+        if (
+            !nextCursor ||
+            !pageData.length
+        ) {
+            break;
+        }
+
+        cursor = nextCursor;
+    }
+
+    return allInstruments;
 }
 
 function isBTCStrikeInstrument(instrument) {
@@ -377,10 +419,26 @@ function isBTCStrikeInstrument(instrument) {
             instrument.underlying_symbol || ""
         ).toUpperCase();
 
+    const eventName =
+        String(
+            instrument.event_details
+                ?.eventName ||
+                ""
+        ).toUpperCase();
+
+    const eventCode =
+        String(
+            instrument.event_details
+                ?.eventCode ||
+                ""
+        ).toUpperCase();
+
     const isBTC =
         underlying.includes("BTC") ||
         symbol.includes("BTC") ||
-        displayName.includes("BTC");
+        displayName.includes("BTC") ||
+        eventName.includes("BTC") ||
+        eventCode.includes("BTC");
 
     if (!isBTC) {
         return false;
@@ -457,7 +515,8 @@ function extractStrikePrice(instrument) {
         "strike_price",
         "strike",
         "STRIKE_PRICE",
-        "strikePrice"
+        "strikePrice",
+        "strike_index_price"
     ];
 
     for (const field of possibleFields) {
@@ -473,6 +532,68 @@ function extractStrikePrice(instrument) {
 
             if (value !== null) {
                 return value;
+            }
+        }
+    }
+
+    const metadata =
+        instrument.event_details
+            ?.metaData || {};
+
+    for (const [key, value] of Object.entries(
+        metadata
+    )) {
+        const normalizedKey =
+            String(key)
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+
+        if (
+            normalizedKey.includes(
+                "strikeprice"
+            ) ||
+            normalizedKey === "strike"
+        ) {
+            const number =
+                safeNumber(value);
+
+            if (number !== null) {
+                return number;
+            }
+
+            const text =
+                String(value);
+
+            const matches =
+                text.match(
+                    /\$?\d+(?:,\d{3})*(?:\.\d+)?/g
+                );
+
+            if (matches?.length) {
+                const numbers =
+                    matches
+                        .map((item) =>
+                            Number(
+                                item
+                                    .replace(
+                                        "$",
+                                        ""
+                                    )
+                                    .replace(
+                                        /,/g,
+                                        ""
+                                    )
+                            )
+                        )
+                        .filter(
+                            Number.isFinite
+                        );
+
+                if (numbers.length) {
+                    return Math.max(
+                        ...numbers
+                    );
+                }
             }
         }
     }
@@ -495,7 +616,10 @@ function extractStrikePrice(instrument) {
                     Number(
                         value
                             .replace("$", "")
-                            .replace(/,/g, "")
+                            .replace(
+                                /,/g,
+                                ""
+                            )
                     )
                 )
                 .filter(
