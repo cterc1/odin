@@ -10,7 +10,6 @@ const io = new Server(server);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 10000;
 
@@ -522,7 +521,7 @@ function extractStrikePrice(instrument) {
     for (const field of possibleFields) {
         if (
             instrument[field] !==
-            undefined &&
+                undefined &&
             instrument[field] !== null
         ) {
             const value =
@@ -615,7 +614,10 @@ function extractStrikePrice(instrument) {
                 .map((value) =>
                     Number(
                         value
-                            .replace("$", "")
+                            .replace(
+                                "$",
+                                ""
+                            )
                             .replace(
                                 /,/g,
                                 ""
@@ -934,7 +936,8 @@ function calculateOrderBookMetrics(
 
 function calculateTradeFlow() {
     const cutoff =
-        now() - 3 * 60 * 1000;
+        now() -
+        3 * 60 * 1000;
 
     const recent =
         tradeHistory.filter(
@@ -1684,7 +1687,9 @@ async function collectMarketData() {
             getBTCTrades()
         ]);
 
-        if (index?.price !== null) {
+        if (
+            index?.price !== null
+        ) {
             state.btcIndexPrice =
                 index.price;
         }
@@ -2047,6 +2052,28 @@ async function poll() {
 }
 
 app.get(
+    "/",
+    (req, res) => {
+        res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "index.html"
+            )
+        );
+    }
+);
+
+app.use(
+    express.static(
+        path.join(
+            __dirname,
+            "public"
+        )
+    )
+);
+
+app.get(
     "/api/status",
     (req, res) => {
         res.json(
@@ -2128,30 +2155,39 @@ server.listen(
     PORT,
     async () => {
         console.log("");
+
         console.log(
             "=========================================="
         );
+
         console.log(
             "          ODIN STRIKE OPTIONS BOT"
         );
+
         console.log(
             "=========================================="
         );
+
         console.log(
             `Server: http://localhost:${PORT}`
         );
+
         console.log(
             "Mode: PAPER FORECASTING"
         );
+
         console.log(
             "Market: BTC Strike Options"
         );
+
         console.log(
             "Collection phase: 3 minutes"
         );
+
         console.log(
             "=========================================="
         );
+
         console.log("");
 
         await refreshInstruments();
