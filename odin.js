@@ -367,7 +367,28 @@ async function getInstruments() {
     let allInstruments = [];
     let cursor = null;
 
-    for (let page = 0; page < 10; page++) {
+    /*
+     * Crypto.com allows up to 1000 instruments per page.
+     *
+     * IMPORTANT:
+     * Do not stop after 10 pages.
+     *
+     * The previous code stopped at:
+     *
+     *     10 pages x 1000 = 10,000 instruments
+     *
+     * BTC Strike Options may exist beyond those first
+     * 10,000 instruments.
+     *
+     * We now continue following next_cursor until the
+     * API tells us there are no more pages.
+     *
+     * 1000 pages is only a safety limit against a bad
+     * cursor/API response. It is not the normal stopping
+     * condition.
+     */
+
+    for (let page = 0; page < 1000; page++) {
         const params = {
             inst_type: "BINARY_OPTION",
             limit: 1000,
@@ -395,6 +416,10 @@ async function getInstruments() {
                 pageData
             );
 
+        console.log(
+            `[ODIN] Instrument page ${page + 1}: ${pageData.length} instruments | Total: ${allInstruments.length}`
+        );
+
         const nextCursor =
             result?.next_cursor;
 
@@ -402,6 +427,10 @@ async function getInstruments() {
             !nextCursor ||
             !pageData.length
         ) {
+            console.log(
+                `[ODIN] Finished instrument pagination at ${allInstruments.length} instruments`
+            );
+
             break;
         }
 
