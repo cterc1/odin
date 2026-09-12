@@ -195,7 +195,8 @@ function percentile(values, percentileValue) {
     }
 
     const index =
-        (clean.length - 1) * percentileValue;
+        (clean.length - 1) *
+        percentileValue;
 
     const lower = Math.floor(index);
     const upper = Math.ceil(index);
@@ -398,6 +399,81 @@ async function getInstruments() {
     return allInstruments;
 }
 
+function getInstrumentAttributes(instrument) {
+    if (
+        instrument &&
+        instrument.attributes &&
+        typeof instrument.attributes === "object"
+    ) {
+        return instrument.attributes;
+    }
+
+    return {};
+}
+
+function getStrikeOperator(instrument) {
+    const attributes =
+        getInstrumentAttributes(
+            instrument
+        );
+
+    const operatorCandidates = [
+        instrument?.STRIKE_OPERATOR,
+        instrument?.strike_operator,
+        attributes?.STRIKE_OPERATOR,
+        attributes?.strike_operator
+    ];
+
+    for (const value of operatorCandidates) {
+        if (
+            value !== undefined &&
+            value !== null
+        ) {
+            const operator =
+                String(value).trim();
+
+            if (
+                operator === ">" ||
+                operator === ">=" ||
+                operator === "<" ||
+                operator === "<=" ||
+                operator === "=" ||
+                operator === "to"
+            ) {
+                return operator;
+            }
+        }
+    }
+
+    return null;
+}
+
+function getStrikeIndex(instrument) {
+    const attributes =
+        getInstrumentAttributes(
+            instrument
+        );
+
+    const candidates = [
+        instrument?.STRIKE_INDEX,
+        instrument?.strike_index,
+        attributes?.STRIKE_INDEX,
+        attributes?.strike_index
+    ];
+
+    for (const value of candidates) {
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ""
+        ) {
+            return String(value).trim();
+        }
+    }
+
+    return null;
+}
+
 function isBTCStrikeInstrument(instrument) {
     if (!instrument) {
         return false;
@@ -418,6 +494,11 @@ function isBTCStrikeInstrument(instrument) {
             instrument.underlying_symbol || ""
         ).toUpperCase();
 
+    const baseCurrency =
+        String(
+            instrument.base_ccy || ""
+        ).toUpperCase();
+
     const eventName =
         String(
             instrument.event_details
@@ -436,6 +517,7 @@ function isBTCStrikeInstrument(instrument) {
         underlying.includes("BTC") ||
         symbol.includes("BTC") ||
         displayName.includes("BTC") ||
+        baseCurrency === "BTC" ||
         eventName.includes("BTC") ||
         eventCode.includes("BTC");
 
@@ -444,9 +526,8 @@ function isBTCStrikeInstrument(instrument) {
     }
 
     const operator =
-        String(
-            instrument.STRIKE_OPERATOR ||
-            ""
+        getStrikeOperator(
+            instrument
         );
 
     return (
@@ -479,10 +560,14 @@ function normalizeInstrument(instrument) {
             formatTimestamp(expiry),
 
         strikeIndex:
-            instrument.STRIKE_INDEX,
+            getStrikeIndex(
+                instrument
+            ),
 
         strikeOperator:
-            instrument.STRIKE_OPERATOR,
+            getStrikeOperator(
+                instrument
+            ),
 
         contractSize:
             safeNumber(
@@ -535,9 +620,109 @@ function extractStrikePrice(instrument) {
         }
     }
 
+    const attributes =
+        getInstrumentAttributes(
+            instrument
+        );
+
+    const attributeStrikeFields = [
+        "STRIKE_PRICE",
+        "strike_price",
+        "STRIKE",
+        "strike",
+        "STRIKE_VALUE",
+        "strike_value"
+    ];
+
+    for (
+        const field of
+            attributeStrikeFields
+    ) {
+        if (
+            attributes[field] !==
+                undefined &&
+            attributes[field] !== null
+        ) {
+            const value =
+                safeNumber(
+                    attributes[field]
+                );
+
+            if (value !== null) {
+                return value;
+            }
+        }
+    }
+
     const metadata =
         instrument.event_details
             ?.metaData || {};
+
+    const metadataKeys = [
+        "strikePrice",
+        "strike_price",
+        "strike",
+        "Strike Price",
+        "STRIKE_PRICE",
+        "price",
+        "Price"
+    ];
+
+    for (
+        const key of metadataKeys
+    ) {
+        if (
+            metadata[key] !==
+                undefined &&
+            metadata[key] !== null
+        ) {
+            const value =
+                safeNumber(
+                    metadata[key]
+                );
+
+            if (value !== null) {
+                return value;
+            }
+
+            const text =
+                String(
+                    metadata[key]
+                );
+
+            const matches =
+                text.match(
+                    /\$?\d+(?:,\d{3})*(?:\.\d+)?/g
+                );
+
+            if (matches?.length) {
+                const numbers =
+                    matches
+                        .map((item) =>
+                            Number(
+                                item
+                                    .replace(
+                                        "$",
+                                        ""
+                                    )
+                                    .replace(
+                                        /,/g,
+                                        ""
+                                    )
+                            )
+                        )
+                        .filter(
+                            Number.isFinite
+                        );
+
+                if (numbers.length) {
+                    return Math.max(
+                        ...numbers
+                    );
+                }
+            }
+        }
+    }
 
     for (const [key, value] of Object.entries(
         metadata
@@ -545,7 +730,10 @@ function extractStrikePrice(instrument) {
         const normalizedKey =
             String(key)
                 .toLowerCase()
-                .replace(/[^a-z0-9]/g, "");
+                .replace(
+                    /[^a-z0-9]/g,
+                    ""
+                );
 
         if (
             normalizedKey.includes(
@@ -635,6 +823,40 @@ function extractStrikePrice(instrument) {
         }
     }
 
+    const symbol =
+        String(
+            instrument.symbol ||
+                ""
+        );
+
+    const symbolMatches =
+        symbol.match(
+            /\d+(?:\.\d+)?/g
+        );
+
+    if (
+        symbolMatches?.length
+    ) {
+        const numbers =
+            symbolMatches
+                .map((value) =>
+                    Number(value)
+                )
+                .filter(
+                    Number.isFinite
+                )
+                .filter(
+                    (value) =>
+                        value > 1000
+                );
+
+        if (numbers.length) {
+            return Math.max(
+                ...numbers
+            );
+        }
+    }
+
     return null;
 }
 
@@ -653,7 +875,10 @@ function selectCurrentContract(
                         currentTime &&
                     instrument.expiry -
                         currentTime <=
-                        2 * 60 * 60 * 1000
+                        24 *
+                            60 *
+                            60 *
+                            1000
             )
             .filter(
                 (instrument) =>
@@ -1439,8 +1664,7 @@ function calculateForecast() {
 
     const confidence =
         Math.abs(
-            probability -
-                0.5
+            probability - 0.5
         ) * 2;
 
     let forecast =
@@ -1582,11 +1806,11 @@ function calculateStateMetrics() {
 
 async function refreshInstruments() {
     try {
-        instruments =
+        const loadedInstruments =
             await getInstruments();
 
         const btcInstruments =
-            instruments.filter(
+            loadedInstruments.filter(
                 isBTCStrikeInstrument
             );
 
@@ -1596,7 +1820,60 @@ async function refreshInstruments() {
         state.connected = true;
 
         console.log(
-            `[ODIN] Loaded ${instruments.length} BTC binary/strike instruments`
+            `[ODIN] Loaded ${instruments.length} BTC Strike instruments`
+        );
+
+        if (
+            loadedInstruments.length > 0 &&
+            btcInstruments.length === 0
+        ) {
+            const sample =
+                loadedInstruments
+                    .slice(0, 3)
+                    .map(
+                        (instrument) => ({
+                            symbol:
+                                instrument.symbol,
+                            underlying:
+                                instrument.underlying_symbol,
+                            displayName:
+                                instrument.display_name,
+                            operator:
+                                getStrikeOperator(
+                                    instrument
+                                ),
+                            strikeIndex:
+                                getStrikeIndex(
+                                    instrument
+                                ),
+                            attributes:
+                                instrument.attributes
+                        })
+                    );
+
+            console.log(
+                "[ODIN] No BTC Strike instruments passed the filter. Sample:",
+                JSON.stringify(
+                    sample,
+                    null,
+                    2
+                )
+            );
+        }
+
+        const withStrikes =
+            btcInstruments
+                .map(
+                    normalizeInstrument
+                )
+                .filter(
+                    (instrument) =>
+                        instrument.strikePrice !==
+                        null
+                );
+
+        console.log(
+            `[ODIN] BTC instruments with detected strikes: ${withStrikes.length}`
         );
     } catch (error) {
         console.error(
@@ -1620,6 +1897,14 @@ async function resolveCurrentContract() {
         );
 
     if (!selected) {
+        if (
+            instruments.length > 0
+        ) {
+            console.log(
+                "[ODIN] BTC Strike instruments loaded, but no eligible current contract was found."
+            );
+        }
+
         currentContract =
             null;
 
@@ -1646,7 +1931,7 @@ async function resolveCurrentContract() {
             selected;
 
         console.log(
-            `[ODIN] Active strike: ${selected.symbol} | Strike ${selected.strikePrice} | Expiry ${selected.expiryISO}`
+            `[ODIN] Active strike: ${selected.symbol} | Strike ${selected.strikePrice} | Operator ${selected.strikeOperator} | Expiry ${selected.expiryISO}`
         );
 
         startRoundIfNeeded();
@@ -1862,9 +2147,9 @@ function evaluateExpiredRound() {
 
     if (
         state.btcPrice ===
-        null ||
+            null ||
         currentRound.strike ===
-        null
+            null
     ) {
         return;
     }
@@ -1926,7 +2211,8 @@ function evaluateExpiredRound() {
         `[ODIN] Round ${currentRound.id} resolved: ${result}`
     );
 
-    currentRound = null;
+    currentRound =
+        null;
 
     state.forecast =
         "WAIT";
