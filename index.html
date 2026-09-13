@@ -152,6 +152,12 @@
             color: #f2c96b;
         }
 
+        .prediction-call.sit-out {
+            color: #f2c96b;
+            font-size: 42px;
+            letter-spacing: -1.5px;
+        }
+
         .prediction-meta {
             text-align: right;
         }
@@ -171,6 +177,62 @@
             color: #697286;
             font-size: 12px;
             margin-top: 4px;
+        }
+
+        .collection-timer {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border: 1px solid #262d3d;
+            border-radius: 11px;
+            background: #0b0e14;
+        }
+
+        .collection-timer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .collection-timer-label {
+            color: #7f8798;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+        }
+
+        .collection-timer-value {
+            color: #7f8cff;
+            font-size: 22px;
+            line-height: 1;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .collection-timer.ready .collection-timer-value {
+            color: #45d39b;
+        }
+
+        .collection-timer.waiting .collection-timer-value {
+            color: #f2c96b;
+        }
+
+        .collection-timer-bar {
+            height: 5px;
+            width: 100%;
+            margin-top: 9px;
+            border-radius: 99px;
+            background: #202531;
+            overflow: hidden;
+        }
+
+        .collection-timer-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 99px;
+            background: #7f8cff;
+            transition: width 0.25s linear;
         }
 
         .why {
@@ -230,42 +292,80 @@
             min-height: 445px;
         }
 
-        .chart-controls {
-            display: flex;
-            gap: 6px;
-        }
-
-        .time-button {
-            border: 1px solid #292f3c;
-            background: #151922;
-            color: #7f8799;
-            border-radius: 7px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .time-button:hover {
-            background: #1b202b;
-            color: #e8ebf0;
-        }
-
-        .time-button.active {
-            background: #252c3b;
-            color: #ffffff;
-            border-color: #3a4357;
-        }
-
         .chart-wrap {
-            height: 385px;
-            padding: 10px 14px 14px;
+            height: 401px;
+            padding: 0;
             position: relative;
+            overflow: hidden;
+            background: #10131a;
         }
 
-        #btcChart {
+        .tradingview-chart {
             width: 100%;
             height: 100%;
+            min-height: 0;
             display: block;
+        }
+
+        .tradingview-widget-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        .tradingview-widget-container__widget {
+            width: 100%;
+            height: calc(100% - 28px);
+        }
+
+        .tradingview-widget-copyright {
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            padding-right: 10px;
+            color: #626c7f;
+            font-size: 9px;
+            background: #10131a;
+        }
+
+        .tradingview-widget-copyright a {
+            color: #7f8cff;
+            text-decoration: none;
+        }
+
+        .chart-overlay {
+            position: absolute;
+            left: 14px;
+            top: 12px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+
+        .chart-price {
+            padding: 7px 9px;
+            border: 1px solid #252b39;
+            border-radius: 8px;
+            background: rgba(8, 10, 15, 0.82);
+            color: #e8ebf0;
+            font-size: 12px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chart-source {
+            padding: 7px 9px;
+            border: 1px solid #252b39;
+            border-radius: 8px;
+            background: rgba(8, 10, 15, 0.82);
+            color: #687184;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
         }
 
         .chart-empty {
@@ -274,7 +374,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #626b7e;
+            color: #687184;
             font-size: 13px;
             pointer-events: none;
         }
@@ -541,6 +641,40 @@
 
                     </div>
 
+                    <div
+                        class="collection-timer waiting"
+                        id="collectionTimer"
+                    >
+                        <div class="collection-timer-row">
+                            <div>
+                                <div class="collection-timer-label">
+                                    Data collection
+                                </div>
+
+                                <div
+                                    class="round-info"
+                                    id="collectionStatusText"
+                                >
+                                    Waiting for a 15-minute contract...
+                                </div>
+                            </div>
+
+                            <div
+                                class="collection-timer-value"
+                                id="collectionTimerValue"
+                            >
+                                --:--
+                            </div>
+                        </div>
+
+                        <div class="collection-timer-bar">
+                            <div
+                                class="collection-timer-fill"
+                                id="collectionTimerFill"
+                            ></div>
+                        </div>
+                    </div>
+
                     <div class="why">
 
                         <div class="why-title">
@@ -718,42 +852,48 @@
                         Live BTC Chart
                     </div>
 
-                    <div class="chart-controls">
-
-                        <button
-                            class="time-button active"
-                            data-timeframe="1m"
-                        >
-                            1m
-                        </button>
-
-                        <button
-                            class="time-button"
-                            data-timeframe="5m"
-                        >
-                            5m
-                        </button>
-
-                        <button
-                            class="time-button"
-                            data-timeframe="15m"
-                        >
-                            15m
-                        </button>
-
+                    <div
+                        id="chartStatus"
+                        style="
+                            color:#626c7f;
+                            font-size:11px;
+                        "
+                    >
+                        Waiting for data
                     </div>
 
                 </div>
 
                 <div class="chart-wrap">
 
-                    <canvas id="btcChart"></canvas>
+                    <div
+                        id="tradingViewChart"
+                        class="tradingview-chart"
+                    ></div>
+
+                    <div
+                        class="chart-overlay"
+                    >
+                        <div
+                            class="chart-price"
+                            id="chartPrice"
+                        >
+                            BTC --
+                        </div>
+
+                        <div
+                            class="chart-source"
+                            id="chartSource"
+                        >
+                            DCM INDEX
+                        </div>
+                    </div>
 
                     <div
                         class="chart-empty"
                         id="chartEmpty"
                     >
-                        Waiting for BTC price data...
+                        Waiting for BTC index data...
                     </div>
 
                 </div>
@@ -1064,9 +1204,13 @@
 
     <script>
         const state = {
-            timeframe: "1m",
-            priceHistory: [],
-            latest: null
+            latest: null,
+            serverOffsetMs: 0,
+            collectionRemainingMs: null,
+            collectionTotalMs: 0,
+            lastPrice: null,
+            chartPoints: [],
+            tradingViewInitialized: false
         };
 
         const elements = {
@@ -1094,6 +1238,24 @@
 
             roundId:
                 document.getElementById("roundId"),
+
+            collectionTimer:
+                document.getElementById("collectionTimer"),
+
+            collectionTimerValue:
+                document.getElementById(
+                    "collectionTimerValue"
+                ),
+
+            collectionTimerFill:
+                document.getElementById(
+                    "collectionTimerFill"
+                ),
+
+            collectionStatusText:
+                document.getElementById(
+                    "collectionStatusText"
+                ),
 
             distanceValue:
                 document.getElementById(
@@ -1168,6 +1330,23 @@
                     "expiry"
                 ),
 
+            tradingViewChart:
+                document.getElementById(
+                    "tradingViewChart"
+                ),
+
+            chartStatus:
+                document.getElementById("chartStatus"),
+
+            chartPrice:
+                document.getElementById("chartPrice"),
+
+            chartSource:
+                document.getElementById("chartSource"),
+
+            chartEmpty:
+                document.getElementById("chartEmpty"),
+
             todayRecord:
                 document.getElementById(
                     "todayRecord"
@@ -1216,25 +1395,8 @@
             weeklyStreak:
                 document.getElementById(
                     "weeklyStreak"
-                ),
-
-            chart:
-                document.getElementById(
-                    "btcChart"
-                ),
-
-            chartEmpty:
-                document.getElementById(
-                    "chartEmpty"
                 )
         };
-
-        let chartContext = null;
-
-        if (elements.chart) {
-            chartContext =
-                elements.chart.getContext("2d");
-        }
 
         function number(
             value,
@@ -1304,56 +1466,6 @@
             );
         }
 
-        function signedPercentFromDecimal(
-            value
-        ) {
-            if (
-                value === null ||
-                value === undefined ||
-                !Number.isFinite(
-                    Number(value)
-                )
-            ) {
-                return "--";
-            }
-
-            const n =
-                Number(value) * 100;
-
-            return (
-                `${n >= 0 ? "+" : ""}` +
-                `${n.toFixed(3)}%`
-            );
-        }
-
-        function formatTime(
-            timestamp
-        ) {
-            if (!timestamp) {
-                return "--";
-            }
-
-            const date =
-                new Date(timestamp);
-
-            if (
-                Number.isNaN(
-                    date.getTime()
-                )
-            ) {
-                return "--";
-            }
-
-            return date.toLocaleTimeString(
-                [],
-                {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    second: "2-digit"
-                }
-            );
-        }
-
         function formatExpiry(
             timestamp
         ) {
@@ -1418,9 +1530,14 @@
             elements.predictionCall.textContent =
                 forecast;
 
+            const forecastClass =
+                forecast
+                    .toLowerCase()
+                    .replace(/\s+/g, "-");
+
             elements.predictionCall.className =
                 "prediction-call " +
-                forecast.toLowerCase();
+                forecastClass;
 
             elements.predictionProbability.textContent =
                 percentFromBackend(
@@ -1440,6 +1557,241 @@
                 data.activeRoundId
                     ? `Round ${data.activeRoundId}`
                     : "Waiting for contract...";
+        }
+
+        function updateCollectionTimer(
+            data
+        ) {
+            const remainingSeconds =
+                Number(
+                    data.collectionRemaining
+                );
+
+            const elapsedSeconds =
+                Number(
+                    data.collectionElapsed
+                );
+
+            const configuredTotal =
+                Number(
+                    data.collectionTotalSeconds
+                );
+
+            if (
+                Number.isFinite(
+                    configuredTotal
+                ) &&
+                configuredTotal > 0
+            ) {
+                state.collectionTotalMs =
+                    configuredTotal *
+                    1000;
+            } else if (
+                Number.isFinite(
+                    elapsedSeconds
+                ) &&
+                Number.isFinite(
+                    remainingSeconds
+                )
+            ) {
+                state.collectionTotalMs =
+                    Math.max(
+                        state.collectionTotalMs,
+                        (
+                            elapsedSeconds +
+                            remainingSeconds
+                        ) *
+                            1000
+                    );
+            }
+
+            if (
+                Number.isFinite(
+                    remainingSeconds
+                ) &&
+                remainingSeconds > 0 &&
+                String(
+                    data.phase || ""
+                ).toUpperCase() ===
+                    "COLLECTING"
+            ) {
+                state.collectionRemainingMs =
+                    remainingSeconds *
+                    1000;
+
+                state.serverOffsetMs =
+                    Number.isFinite(
+                        Number(
+                            data.serverTime
+                        )
+                    )
+                        ? Number(
+                              data.serverTime
+                          ) - Date.now()
+                        : state.serverOffsetMs;
+
+                elements.collectionTimer.className =
+                    "collection-timer";
+
+                elements.collectionStatusText.textContent =
+                    "Odin is collecting data before forecasting.";
+            } else {
+                state.collectionRemainingMs =
+                    null;
+
+                const phase =
+                    String(
+                        data.phase ||
+                        "WAITING"
+                    ).toUpperCase();
+
+                elements.collectionTimer.className =
+                    phase === "WAITING"
+                        ? "collection-timer waiting"
+                        : "collection-timer ready";
+
+                if (
+                    phase === "LOCKED" ||
+                    data.forecastMade
+                ) {
+                    elements.collectionStatusText.textContent =
+                        "Data collection complete. Forecast locked.";
+                } else if (
+                    phase === "WAITING"
+                ) {
+                    elements.collectionStatusText.textContent =
+                        "Waiting for a 15-minute contract...";
+                } else {
+                    elements.collectionStatusText.textContent =
+                        "Preparing data...";
+                }
+            }
+
+            renderCollectionTimer();
+        }
+
+        function formatTimer(
+            milliseconds
+        ) {
+            if (
+                !Number.isFinite(
+                    milliseconds
+                ) ||
+                milliseconds < 0
+            ) {
+                return "--:--";
+            }
+
+            const totalSeconds =
+                Math.ceil(
+                    milliseconds / 1000
+                );
+
+            const minutes =
+                Math.floor(
+                    totalSeconds / 60
+                );
+
+            const seconds =
+                totalSeconds % 60;
+
+            return (
+                `${String(minutes).padStart(2, "0")}:` +
+                `${String(seconds).padStart(2, "0")}`
+            );
+        }
+
+        function renderCollectionTimer() {
+            if (
+                state.collectionRemainingMs ===
+                    null
+            ) {
+                elements.collectionTimerValue.textContent =
+                    elements.collectionTimer.classList.contains(
+                        "ready"
+                    )
+                        ? "READY"
+                        : "--:--";
+
+                elements.collectionTimerFill.style.width =
+                    elements.collectionTimer.classList.contains(
+                        "ready"
+                    )
+                        ? "100%"
+                        : "0%";
+
+                return;
+            }
+
+            const nowAdjusted =
+                Date.now() +
+                state.serverOffsetMs;
+
+            const target =
+                state.collectionTargetServerMs;
+
+            let remaining =
+                state.collectionRemainingMs;
+
+            if (
+                Number.isFinite(target)
+            ) {
+                remaining =
+                    Math.max(
+                        0,
+                        target -
+                            nowAdjusted
+                    );
+            }
+
+            state.collectionRemainingMs =
+                remaining;
+
+            elements.collectionTimerValue.textContent =
+                formatTimer(
+                    remaining
+                );
+
+            const total =
+                state.collectionTotalMs > 0
+                    ? state.collectionTotalMs
+                    : 1;
+
+            const progress =
+                Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        (
+                            (total -
+                                remaining) /
+                                total
+                        ) *
+                            100
+                    )
+                );
+
+            elements.collectionTimerFill.style.width =
+                `${progress}%`;
+
+            if (
+                remaining <= 0
+            ) {
+                state.collectionRemainingMs =
+                    null;
+
+                elements.collectionTimer.className =
+                    "collection-timer ready";
+
+                elements.collectionTimerValue.textContent =
+                    "READY";
+
+                elements.collectionTimerFill.style.width =
+                    "100%";
+
+                elements.collectionStatusText.textContent =
+                    "Collection complete. Odin can evaluate the forecast.";
+            }
         }
 
         function updateReasons(
@@ -1531,7 +1883,7 @@
                     )
                 )
             ) {
-                elements.marketBar.style.width =
+                elements.marketFill.style.width =
                     `${Math.max(
                         0,
                         Math.min(
@@ -1541,6 +1893,9 @@
                             )
                         )
                     )}%`;
+            } else {
+                elements.marketFill.style.width =
+                    "0%";
             }
         }
 
@@ -1602,21 +1957,59 @@
                     performance.total || 0
                 );
 
+            const daily =
+                data.dailyRecord ||
+                data.dailyRecords?.[data.recordDate] ||
+                null;
+
+            const dailyWins =
+                Number(
+                    data.dailyWins ??
+                    daily?.wins ??
+                    0
+                );
+
+            const dailyLosses =
+                Number(
+                    data.dailyLosses ??
+                    daily?.losses ??
+                    0
+                );
+
+            const dailyTotal =
+                dailyWins +
+                dailyLosses;
+
+            const dailyAccuracy =
+                data.dailyAccuracy !== null &&
+                data.dailyAccuracy !== undefined
+                    ? Number(
+                          data.dailyAccuracy
+                      )
+                    : dailyTotal > 0
+                        ? (
+                              dailyWins /
+                              dailyTotal
+                          ) *
+                          100
+                        : null;
+
             elements.todayRecord.textContent =
-                `${wins} - ${losses}`;
+                `${dailyWins} - ${dailyLosses}`;
 
             elements.weeklyRecord.textContent =
                 `${wins} - ${losses}`;
 
             elements.todayRounds.textContent =
-                total;
+                dailyTotal;
 
             elements.weeklyRounds.textContent =
                 total;
 
             elements.todayPasses.textContent =
                 completedPasses(
-                    data.recentRounds
+                    data.recentRounds,
+                    data.recordDate
                 );
 
             elements.weeklyPasses.textContent =
@@ -1625,11 +2018,11 @@
                 );
 
             elements.todayAccuracy.textContent =
-                performance.accuracy !== null &&
-                performance.accuracy !== undefined
-                    ? `${Number(
-                          performance.accuracy
-                      ).toFixed(1)}%`
+                dailyAccuracy !== null &&
+                Number.isFinite(
+                    dailyAccuracy
+                )
+                    ? `${dailyAccuracy.toFixed(1)}%`
                     : "--%";
 
             elements.weeklyAccuracy.textContent =
@@ -1653,26 +2046,38 @@
         }
 
         function completedPasses(
-            rounds
+            rounds,
+            recordDate = null
         ) {
             if (!Array.isArray(rounds)) {
                 return 0;
             }
 
             return rounds.filter(
-                round =>
-                    String(
+                round => {
+                    if (
+                        recordDate &&
+                        round.recordDate &&
+                        round.recordDate !==
+                            recordDate
+                    ) {
+                        return false;
+                    }
+
+                    return String(
                         round.forecast ||
                         ""
                     ).toUpperCase() ===
-                    "PASS"
+                        "PASS";
+                }
             ).length;
         }
 
         function calculateStreak(
             rounds
         ) {
-            if (!Array.isArray(rounds) ||
+            if (
+                !Array.isArray(rounds) ||
                 rounds.length === 0
             ) {
                 return "--";
@@ -1712,623 +2117,159 @@
             return `${count} ${first}`;
         }
 
-        function addPricePoint(
-            data
-        ) {
+        function initializeTradingViewChart() {
             if (
-                !data ||
-                data.btcPrice === null ||
-                data.btcPrice === undefined ||
-                !Number.isFinite(
-                    Number(
-                        data.btcPrice
-                    )
-                )
+                !elements.tradingViewChart ||
+                state.tradingViewInitialized
             ) {
                 return;
             }
 
-            const timestamp =
-                data.lastUpdate
-                    ? Number(
-                          data.lastUpdate
-                      )
-                    : Date.now();
+            state.tradingViewInitialized =
+                true;
 
-            const strike =
-                data.strikePrice !== null &&
-                data.strikePrice !== undefined
-                    ? Number(
-                          data.strikePrice
-                      )
-                    : null;
+            elements.tradingViewChart.innerHTML =
+                "";
 
-            state.priceHistory.push({
-                time: timestamp,
-                price: Number(
-                    data.btcPrice
-                ),
-                strike
-            });
-
-            const cutoff =
-                Date.now() -
-                60 * 60 * 1000;
-
-            state.priceHistory =
-                state.priceHistory.filter(
-                    point =>
-                        point.time >=
-                        cutoff
+            const widgetContainer =
+                document.createElement(
+                    "div"
                 );
+
+            widgetContainer.className =
+                "tradingview-widget-container";
+
+            widgetContainer.style.width =
+                "100%";
+
+            widgetContainer.style.height =
+                "100%";
+
+            const widget =
+                document.createElement(
+                    "div"
+                );
+
+            widget.className =
+                "tradingview-widget-container__widget";
+
+            widget.style.width =
+                "100%";
+
+            widget.style.height =
+                "calc(100% - 28px)";
+
+            const copyright =
+                document.createElement(
+                    "div"
+                );
+
+            copyright.className =
+                "tradingview-widget-copyright";
+
+            copyright.innerHTML =
+                '<a href="https://www.tradingview.com/symbols/COINBASE-BTCUSD/" target="_blank" rel="noopener nofollow">BTCUSD chart</a><span> by TradingView</span>';
+
+            const script =
+                document.createElement(
+                    "script"
+                );
+
+            script.type =
+                "text/javascript";
+
+            script.src =
+                "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+
+            script.async =
+                true;
+
+            script.textContent =
+                JSON.stringify({
+                    autosize: true,
+                    symbol: "COINBASE:BTCUSD",
+                    interval: "1",
+                    timezone: "Etc/UTC",
+                    theme: "dark",
+                    style: "1",
+                    hide_top_toolbar: false,
+                    hide_side_toolbar: true,
+                    hide_legend: false,
+                    hide_volume: false,
+                    allow_symbol_change: false,
+                    withdateranges: false,
+                    save_image: false,
+                    calendar: false,
+                    details: false,
+                    hotlist: false,
+                    studies: [],
+                    support_host: "https://www.tradingview.com"
+                });
+
+            widgetContainer.appendChild(
+                widget
+            );
+
+            widgetContainer.appendChild(
+                copyright
+            );
+
+            widgetContainer.appendChild(
+                script
+            );
+
+            elements.tradingViewChart.appendChild(
+                widgetContainer
+            );
+
+            elements.chartStatus.textContent =
+                "Live • TradingView";
+
+            elements.chartSource.textContent =
+                "TRADINGVIEW • COINBASE:BTCUSD";
         }
 
-        function aggregatePoints(
-            minutes
-        ) {
-            const now =
-                Date.now();
-
-            const cutoff =
-                now -
-                minutes *
-                    60 *
-                    1000;
-
-            const points =
-                state.priceHistory.filter(
-                    point =>
-                        point.time >=
-                        cutoff
-                );
-
+        function updateTradingViewStatus() {
             if (
-                minutes === 1
-            ) {
-                return points;
-            }
-
-            if (
-                points.length === 0
-            ) {
-                return [];
-            }
-
-            const bucketSize =
-                minutes *
-                60 *
-                1000;
-
-            const buckets =
-                new Map();
-
-            for (
-                const point of points
-            ) {
-                const bucket =
-                    Math.floor(
-                        point.time /
-                            bucketSize
-                    ) *
-                    bucketSize;
-
-                if (
-                    !buckets.has(
-                        bucket
-                    )
-                ) {
-                    buckets.set(
-                        bucket,
-                        []
-                    );
-                }
-
-                buckets
-                    .get(bucket)
-                    .push(point);
-            }
-
-            return Array.from(
-                buckets.entries()
-            )
-                .sort(
-                    (a, b) =>
-                        a[0] -
-                        b[0]
-                )
-                .map(
-                    ([time, bucket]) => {
-                        const prices =
-                            bucket.map(
-                                point =>
-                                    point.price
-                            );
-
-                        const strikes =
-                            bucket
-                                .map(
-                                    point =>
-                                        point.strike
-                                )
-                                .filter(
-                                    value =>
-                                        Number.isFinite(
-                                            value
-                                        )
-                                );
-
-                        const average =
-                            prices.reduce(
-                                (
-                                    sum,
-                                    value
-                                ) =>
-                                    sum +
-                                    value,
-                                0
-                            ) /
-                            prices.length;
-
-                        const strike =
-                            strikes.length >
-                            0
-                                ? strikes[
-                                      strikes.length -
-                                          1
-                                  ]
-                                : null;
-
-                        return {
-                            time,
-                            price:
-                                average,
-                            strike
-                        };
-                    }
-                );
-        }
-
-        function drawChart() {
-            if (
-                !elements.chart ||
-                !chartContext
+                !elements.tradingViewChart
             ) {
                 return;
             }
 
-            const canvas =
-                elements.chart;
-
-            const rect =
-                canvas.getBoundingClientRect();
-
-            const dpr =
-                window.devicePixelRatio ||
-                1;
-
-            canvas.width =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.width *
-                            dpr
-                    )
+            const iframe =
+                elements.tradingViewChart.querySelector(
+                    "iframe"
                 );
 
-            canvas.height =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.height *
-                            dpr
-                    )
-                );
+            if (iframe) {
+                elements.chartStatus.textContent =
+                    "Live • TradingView";
 
-            chartContext.setTransform(
-                dpr,
-                0,
-                0,
-                dpr,
-                0,
-                0
-            );
-
-            const width =
-                rect.width;
-
-            const height =
-                rect.height;
-
-            chartContext.clearRect(
-                0,
-                0,
-                width,
-                height
-            );
-
-            const minutes =
-                state.timeframe ===
-                "1m"
-                    ? 1
-                    : state.timeframe ===
-                      "5m"
-                        ? 5
-                        : 15;
-
-            const points =
-                aggregatePoints(
-                    minutes
-                );
-
-            if (
-                points.length < 2
-            ) {
                 elements.chartEmpty.style.display =
-                    "flex";
-
-                return;
+                    "none";
+            } else {
+                elements.chartStatus.textContent =
+                    "Loading • TradingView";
             }
+        }
 
-            elements.chartEmpty.style.display =
-                "none";
-
-            const prices =
-                points.map(
-                    point =>
-                        point.price
-                );
-
-            const strikes =
-                points
-                    .map(
-                        point =>
-                            point.strike
-                    )
-                    .filter(
-                        value =>
-                            Number.isFinite(
-                                value
-                            )
-                    );
-
-            const allValues =
-                prices.concat(
-                    strikes
-                );
-
-            let min =
-                Math.min(
-                    ...allValues
-                );
-
-            let max =
-                Math.max(
-                    ...allValues
+        function updateChartPrice(data) {
+            const price =
+                Number(
+                    data.btcIndexPrice
                 );
 
             if (
-                min === max
+                Number.isFinite(price) &&
+                price > 0
             ) {
-                min -= 1;
-                max += 1;
-            }
-
-            const padding =
-                (max - min) *
-                0.08;
-
-            min -= padding;
-            max += padding;
-
-            const left = 55;
-            const right = 15;
-            const top = 18;
-            const bottom = 28;
-
-            const chartWidth =
-                width -
-                left -
-                right;
-
-            const chartHeight =
-                height -
-                top -
-                bottom;
-
-            function xPosition(
-                index
-            ) {
-                if (
-                    points.length <=
-                    1
-                ) {
-                    return left;
-                }
-
-                return (
-                    left +
-                    (index /
-                        (points.length -
-                            1)) *
-                        chartWidth
-                );
-            }
-
-            function yPosition(
-                value
-            ) {
-                return (
-                    top +
-                    ((max - value) /
-                        (max - min)) *
-                        chartHeight
-                );
-            }
-
-            chartContext.strokeStyle =
-                "#1d222d";
-
-            chartContext.lineWidth =
-                1;
-
-            for (
-                let i = 0;
-                i <= 4;
-                i++
-            ) {
-                const y =
-                    top +
-                    (chartHeight /
-                        4) *
-                        i;
-
-                chartContext.beginPath();
-
-                chartContext.moveTo(
-                    left,
-                    y
-                );
-
-                chartContext.lineTo(
-                    width -
-                        right,
-                    y
-                );
-
-                chartContext.stroke();
-
-                const value =
-                    max -
-                    ((max -
-                        min) /
-                        4) *
-                        i;
-
-                chartContext.fillStyle =
-                    "#626b7e";
-
-                chartContext.font =
-                    "11px Arial";
-
-                chartContext.textAlign =
-                    "right";
-
-                chartContext.fillText(
-                    `$${number(
-                        value,
-                        0
-                    )}`,
-                    left - 8,
-                    y + 4
-                );
-            }
-
-            chartContext.beginPath();
-
-            points.forEach(
-                (
-                    point,
-                    index
-                ) => {
-                    const x =
-                        xPosition(
-                            index
-                        );
-
-                    const y =
-                        yPosition(
-                            point.price
-                        );
-
-                    if (
-                        index === 0
-                    ) {
-                        chartContext.moveTo(
-                            x,
-                            y
-                        );
-                    } else {
-                        chartContext.lineTo(
-                            x,
-                            y
-                        );
-                    }
-                }
-            );
-
-            chartContext.strokeStyle =
-                "#dce1e8";
-
-            chartContext.lineWidth =
-                2;
-
-            chartContext.stroke();
-
-            const latestStrike =
-                points
-                    .slice()
-                    .reverse()
-                    .find(
-                        point =>
-                            Number.isFinite(
-                                point.strike
-                            )
-                    );
-
-            if (
-                latestStrike
-            ) {
-                const strikeY =
-                    yPosition(
-                        latestStrike.strike
-                    );
-
-                chartContext.beginPath();
-
-                chartContext.setLineDash(
-                    [
-                        7,
-                        6
-                    ]
-                );
-
-                chartContext.moveTo(
-                    left,
-                    strikeY
-                );
-
-                chartContext.lineTo(
-                    width -
-                        right,
-                    strikeY
-                );
-
-                chartContext.strokeStyle =
-                    "#7f8cff";
-
-                chartContext.lineWidth =
-                    1;
-
-                chartContext.stroke();
-
-                chartContext.setLineDash(
-                    []
-                );
-
-                chartContext.fillStyle =
-                    "#7f8cff";
-
-                chartContext.font =
-                    "11px Arial";
-
-                chartContext.textAlign =
-                    "left";
-
-                chartContext.fillText(
-                    `Strike $${number(
-                        latestStrike.strike,
+                elements.chartPrice.textContent =
+                    `DCM BTC $${number(
+                        price,
                         2
-                    )}`,
-                    left + 6,
-                    strikeY - 7
-                );
+                    )}`;
             }
-
-            const latest =
-                points[
-                    points.length - 1
-                ];
-
-            const latestX =
-                xPosition(
-                    points.length - 1
-                );
-
-            const latestY =
-                yPosition(
-                    latest.price
-                );
-
-            chartContext.beginPath();
-
-            chartContext.arc(
-                latestX,
-                latestY,
-                4,
-                0,
-                Math.PI * 2
-            );
-
-            chartContext.fillStyle =
-                "#ffffff";
-
-            chartContext.fill();
-
-            chartContext.fillStyle =
-                "#8a93a6";
-
-            chartContext.font =
-                "11px Arial";
-
-            chartContext.textAlign =
-                "right";
-
-            chartContext.fillText(
-                formatTime(
-                    latest.time
-                ),
-                width -
-                    right,
-                height - 8
-            );
         }
-
-        function setTimeframe(
-            timeframe
-        ) {
-            state.timeframe =
-                timeframe;
-
-            document
-                .querySelectorAll(
-                    ".time-button"
-                )
-                .forEach(
-                    button => {
-                        button.classList.toggle(
-                            "active",
-                            button.dataset
-                                .timeframe ===
-                                timeframe
-                        );
-                    }
-                );
-
-            drawChart();
-        }
-
-        document
-            .querySelectorAll(
-                ".time-button"
-            )
-            .forEach(
-                button => {
-                    button.addEventListener(
-                        "click",
-                        () => {
-                            setTimeframe(
-                                button.dataset
-                                    .timeframe
-                            );
-                        }
-                    );
-                }
-            );
-
-        window.addEventListener(
-            "resize",
-            drawChart
-        );
 
         function handleUpdate(
             data
@@ -2340,7 +2281,51 @@
             state.latest =
                 data;
 
+            if (
+                Number.isFinite(
+                    Number(
+                        data.serverTime
+                    )
+                )
+            ) {
+                state.serverOffsetMs =
+                    Number(
+                        data.serverTime
+                    ) - Date.now();
+            }
+
+            if (
+                data.collectionRemaining !==
+                    undefined
+            ) {
+                const remaining =
+                    Number(
+                        data.collectionRemaining
+                    );
+
+                if (
+                    Number.isFinite(
+                        remaining
+                    ) &&
+                    remaining > 0
+                ) {
+                    state.collectionTargetServerMs =
+                        Number(
+                            data.serverTime
+                        ) +
+                        remaining *
+                            1000;
+                } else {
+                    state.collectionTargetServerMs =
+                        null;
+                }
+            }
+
             updatePrediction(
+                data
+            );
+
+            updateCollectionTimer(
                 data
             );
 
@@ -2356,11 +2341,11 @@
                 data
             );
 
-            addPricePoint(
+            updateChartPrice(
                 data
             );
 
-            drawChart();
+            updateTradingViewStatus();
         }
 
         function connectSocket() {
@@ -2380,7 +2365,17 @@
             }
 
             const socket =
-                io();
+                io({
+                    transports: [
+                        "websocket",
+                        "polling"
+                    ],
+                    reconnection: true,
+                    reconnectionAttempts: Infinity,
+                    reconnectionDelay: 1000,
+                    reconnectionDelayMax: 5000,
+                    timeout: 10000
+                });
 
             socket.on(
                 "connect",
@@ -2415,7 +2410,7 @@
             );
 
             socket.on(
-                "odin:update",
+                "state",
                 data => {
                     handleUpdate(
                         data
@@ -2428,7 +2423,10 @@
             try {
                 const response =
                     await fetch(
-                        "/api/status"
+                        "/api/state",
+                        {
+                            cache: "no-store"
+                        }
                     );
 
                 if (
@@ -2462,7 +2460,10 @@
             try {
                 const response =
                     await fetch(
-                        "/api/history"
+                        "/api/history",
+                        {
+                            cache: "no-store"
+                        }
                     );
 
                 if (
@@ -2483,61 +2484,20 @@
                     return;
                 }
 
-                for (
-                    const item of data.rounds
-                ) {
-                    if (
-                        item.collectionStartPrice !==
-                        null &&
-                        item.collectionStartPrice !==
-                        undefined
-                    ) {
-                        const price =
-                            Number(
-                                item.collectionStartPrice
-                            );
-
-                        if (
-                            Number.isFinite(
-                                price
-                            )
-                        ) {
-                            state.priceHistory.push(
-                                {
-                                    time:
-                                        Number(
-                                            item.startedAt
-                                        ),
-                                    price,
-                                    strike:
-                                        Number(
-                                            item.strike
-                                        )
-                                }
-                            );
-                        }
-                    }
-                }
-
-                state.priceHistory =
-                    state.priceHistory.filter(
-                        point =>
-                            Number.isFinite(
-                                point.time
-                            ) &&
-                            Number.isFinite(
-                                point.price
-                            )
-                    );
-
-                drawChart();
-
             } catch (error) {
                 console.error(
                     "Failed to load history:",
                     error
                 );
             }
+        }
+
+        function animationLoop() {
+            renderCollectionTimer();
+
+            window.requestAnimationFrame(
+                animationLoop
+            );
         }
 
         setConnection(
@@ -2550,7 +2510,16 @@
 
         loadHistory();
 
-        drawChart();
+        initializeTradingViewChart();
+
+        window.setInterval(
+            updateTradingViewStatus,
+            5000
+        );
+
+        window.requestAnimationFrame(
+            animationLoop
+        );
     </script>
 </body>
 </html>
