@@ -135,21 +135,31 @@ function safeNumber(value) {
 }
 
 function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
+    return Math.max(
+        min,
+        Math.min(max, value)
+    );
 }
 
 function average(values) {
-    const clean = values.filter(Number.isFinite);
+    const clean = values.filter(
+        Number.isFinite
+    );
 
     if (!clean.length) {
         return null;
     }
 
-    return clean.reduce((a, b) => a + b, 0) / clean.length;
+    return clean.reduce(
+        (a, b) => a + b,
+        0
+    ) / clean.length;
 }
 
 function standardDeviation(values) {
-    const clean = values.filter(Number.isFinite);
+    const clean = values.filter(
+        Number.isFinite
+    );
 
     if (clean.length < 2) {
         return null;
@@ -158,9 +168,18 @@ function standardDeviation(values) {
     const mean = average(clean);
 
     const variance =
-        clean.reduce((sum, value) => {
-            return sum + Math.pow(value - mean, 2);
-        }, 0) / clean.length;
+        clean.reduce(
+            (sum, value) => {
+                return (
+                    sum +
+                    Math.pow(
+                        value - mean,
+                        2
+                    )
+                );
+            },
+            0
+        ) / clean.length;
 
     return Math.sqrt(variance);
 }
@@ -174,8 +193,13 @@ function weightedAverage(items) {
     let denominator = 0;
 
     for (const item of items) {
-        const value = safeNumber(item.value);
-        const weight = safeNumber(item.weight);
+        const value = safeNumber(
+            item.value
+        );
+
+        const weight = safeNumber(
+            item.weight
+        );
 
         if (
             value === null ||
@@ -185,21 +209,33 @@ function weightedAverage(items) {
             continue;
         }
 
-        numerator += value * weight;
-        denominator += weight;
+        numerator +=
+            value *
+            weight;
+
+        denominator +=
+            weight;
     }
 
     if (!denominator) {
         return null;
     }
 
-    return numerator / denominator;
+    return (
+        numerator /
+        denominator
+    );
 }
 
-function percentile(values, percentileValue) {
+function percentile(
+    values,
+    percentileValue
+) {
     const clean = values
         .filter(Number.isFinite)
-        .sort((a, b) => a - b);
+        .sort(
+            (a, b) => a - b
+        );
 
     if (!clean.length) {
         return null;
@@ -209,8 +245,11 @@ function percentile(values, percentileValue) {
         (clean.length - 1) *
         percentileValue;
 
-    const lower = Math.floor(index);
-    const upper = Math.ceil(index);
+    const lower =
+        Math.floor(index);
+
+    const upper =
+        Math.ceil(index);
 
     if (lower === upper) {
         return clean[lower];
@@ -218,20 +257,29 @@ function percentile(values, percentileValue) {
 
     return (
         clean[lower] +
-        (clean[upper] - clean[lower]) *
+        (
+            clean[upper] -
+            clean[lower]
+        ) *
             (index - lower)
     );
 }
 
-function formatTimestamp(timestamp) {
+function formatTimestamp(
+    timestamp
+) {
     if (!timestamp) {
         return null;
     }
 
-    return new Date(timestamp).toISOString();
+    return new Date(
+        timestamp
+    ).toISOString();
 }
 
-function createRoundId(expiry) {
+function createRoundId(
+    expiry
+) {
     return `BTC-${expiry}`;
 }
 
@@ -244,9 +292,15 @@ async function cryptoRequest(
         `${apiRoot}/${endpoint}`
     );
 
-    for (const [key, value] of Object.entries(params)) {
+    for (
+        const [
+            key,
+            value
+        ] of Object.entries(params)
+    ) {
         if (
-            value !== undefined &&
+            value !==
+                undefined &&
             value !== null &&
             value !== ""
         ) {
@@ -257,15 +311,17 @@ async function cryptoRequest(
         }
     }
 
-    const response = await fetch(
-        url.toString(),
-        {
-            method: "GET",
-            headers: {
-                Accept: "application/json"
+    const response =
+        await fetch(
+            url.toString(),
+            {
+                method: "GET",
+                headers: {
+                    Accept:
+                        "application/json"
+                }
             }
-        }
-    );
+        );
 
     if (!response.ok) {
         throw new Error(
@@ -273,7 +329,8 @@ async function cryptoRequest(
         );
     }
 
-    const json = await response.json();
+    const json =
+        await response.json();
 
     if (json.code !== 0) {
         throw new Error(
@@ -287,15 +344,19 @@ async function cryptoRequest(
 }
 
 async function getBTCIndex() {
-    const result = await cryptoRequest(
-        "public/get-valuations",
-        {
-            instrument_name:
-                CONFIG.underlyingIndex,
-            valuation_type: "index_price",
-            count: 1
-        }
-    );
+    const result =
+        await cryptoRequest(
+            "public/get-valuations",
+            {
+                instrument_name:
+                    CONFIG.underlyingIndex,
+
+                valuation_type:
+                    "index_price",
+
+                count: 1
+            }
+        );
 
     const item =
         result?.data?.[0];
@@ -305,19 +366,25 @@ async function getBTCIndex() {
     }
 
     return {
-        price: safeNumber(item.v),
-        timestamp: safeNumber(item.t)
+        price: safeNumber(
+            item.v
+        ),
+
+        timestamp: safeNumber(
+            item.t
+        )
     };
 }
 
 async function getBTCPerpTicker() {
-    const result = await cryptoRequest(
-        "public/get-tickers",
-        {
-            instrument_name:
-                CONFIG.underlyingPerp
-        }
-    );
+    const result =
+        await cryptoRequest(
+            "public/get-tickers",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp
+            }
+        );
 
     const ticker =
         result?.data?.[0];
@@ -327,38 +394,62 @@ async function getBTCPerpTicker() {
     }
 
     return {
-        last: safeNumber(ticker.a),
-        bid: safeNumber(ticker.b),
-        ask: safeNumber(ticker.k),
-        bidSize: safeNumber(ticker.bs),
-        askSize: safeNumber(ticker.ks),
-        volume: safeNumber(ticker.v),
-        timestamp: safeNumber(ticker.t)
+        last: safeNumber(
+            ticker.a
+        ),
+
+        bid: safeNumber(
+            ticker.b
+        ),
+
+        ask: safeNumber(
+            ticker.k
+        ),
+
+        bidSize: safeNumber(
+            ticker.bs
+        ),
+
+        askSize: safeNumber(
+            ticker.ks
+        ),
+
+        volume: safeNumber(
+            ticker.v
+        ),
+
+        timestamp: safeNumber(
+            ticker.t
+        )
     };
 }
 
 async function getBTCBook() {
-    const result = await cryptoRequest(
-        "public/get-book",
-        {
-            instrument_name:
-                CONFIG.underlyingPerp,
-            depth: 25
-        }
-    );
+    const result =
+        await cryptoRequest(
+            "public/get-book",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp,
+
+                depth: 25
+            }
+        );
 
     return result;
 }
 
 async function getBTCTrades() {
-    const result = await cryptoRequest(
-        "public/get-trades",
-        {
-            instrument_name:
-                CONFIG.underlyingPerp,
-            count: 50
-        }
-    );
+    const result =
+        await cryptoRequest(
+            "public/get-trades",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp,
+
+                count: 50
+            }
+        );
 
     return result?.data || [];
 }
@@ -367,36 +458,23 @@ async function getInstruments() {
     let allInstruments = [];
     let cursor = null;
 
-    /*
-     * Crypto.com allows up to 1000 instruments per page.
-     *
-     * IMPORTANT:
-     * Do not stop after 10 pages.
-     *
-     * The previous code stopped at:
-     *
-     *     10 pages x 1000 = 10,000 instruments
-     *
-     * BTC Strike Options may exist beyond those first
-     * 10,000 instruments.
-     *
-     * We now continue following next_cursor until the
-     * API tells us there are no more pages.
-     *
-     * 1000 pages is only a safety limit against a bad
-     * cursor/API response. It is not the normal stopping
-     * condition.
-     */
-
-    for (let page = 0; page < 1000; page++) {
+    for (
+        let page = 0;
+        page < 1000;
+        page++
+    ) {
         const params = {
-            inst_type: "BINARY_OPTION",
+            inst_type:
+                "BINARY_OPTION",
+
             limit: 1000,
+
             since: 0
         };
 
         if (cursor) {
-            params.cursor = cursor;
+            params.cursor =
+                cursor;
         }
 
         const result =
@@ -407,7 +485,9 @@ async function getInstruments() {
             );
 
         const pageData =
-            Array.isArray(result?.data)
+            Array.isArray(
+                result?.data
+            )
                 ? result.data
                 : [];
 
@@ -434,17 +514,21 @@ async function getInstruments() {
             break;
         }
 
-        cursor = nextCursor;
+        cursor =
+            nextCursor;
     }
 
     return allInstruments;
 }
 
-function getInstrumentAttributes(instrument) {
+function getInstrumentAttributes(
+    instrument
+) {
     if (
         instrument &&
         instrument.attributes &&
-        typeof instrument.attributes === "object"
+        typeof instrument.attributes ===
+            "object"
     ) {
         return instrument.attributes;
     }
@@ -452,14 +536,17 @@ function getInstrumentAttributes(instrument) {
     return {};
 }
 
-function getEventMetadata(instrument) {
+function getEventMetadata(
+    instrument
+) {
     const metadata =
         instrument?.event_details
             ?.metaData;
 
     if (
         metadata &&
-        typeof metadata === "object"
+        typeof metadata ===
+            "object"
     ) {
         return metadata;
     }
@@ -467,7 +554,9 @@ function getEventMetadata(instrument) {
     return {};
 }
 
-function getStrikeOperator(instrument) {
+function getStrikeOperator(
+    instrument
+) {
     const attributes =
         getInstrumentAttributes(
             instrument
@@ -481,15 +570,20 @@ function getStrikeOperator(instrument) {
     const operatorCandidates = [
         instrument?.STRIKE_OPERATOR,
         instrument?.strike_operator,
+
         attributes?.STRIKE_OPERATOR,
         attributes?.strike_operator,
+
         metadata?.STRIKE_OPERATOR,
         metadata?.strike_operator,
         metadata?.strikeOperator,
         metadata?.operator
     ];
 
-    for (const value of operatorCandidates) {
+    for (
+        const value of
+            operatorCandidates
+    ) {
         if (
             value !== undefined &&
             value !== null
@@ -513,7 +607,9 @@ function getStrikeOperator(instrument) {
     return null;
 }
 
-function getStrikeIndex(instrument) {
+function getStrikeIndex(
+    instrument
+) {
     const attributes =
         getInstrumentAttributes(
             instrument
@@ -522,24 +618,107 @@ function getStrikeIndex(instrument) {
     const candidates = [
         instrument?.STRIKE_INDEX,
         instrument?.strike_index,
+
         attributes?.STRIKE_INDEX,
         attributes?.strike_index
     ];
 
-    for (const value of candidates) {
+    for (
+        const value of candidates
+    ) {
         if (
             value !== undefined &&
             value !== null &&
             String(value).trim() !== ""
         ) {
-            return String(value).trim();
+            return String(
+                value
+            ).trim();
         }
     }
 
     return null;
 }
 
-function getOpenTime(instrument) {
+function parseCryptoDateTime(
+    value
+) {
+    if (!value) {
+        return null;
+    }
+
+    const text =
+        String(value).trim();
+
+    if (
+        /^\d{8}-\d{2}:\d{2}:\d{2}(?:\.\d+)?$/
+            .test(text)
+    ) {
+        const match =
+            text.match(
+                /^(\d{4})(\d{2})(\d{2})-(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/
+            );
+
+        if (match) {
+            const year =
+                Number(match[1]);
+
+            const month =
+                Number(match[2]);
+
+            const day =
+                Number(match[3]);
+
+            const hour =
+                Number(match[4]);
+
+            const minute =
+                Number(match[5]);
+
+            const second =
+                Number(match[6]);
+
+            const fraction =
+                match[7] || "";
+
+            const milliseconds =
+                Number(
+                    (
+                        fraction +
+                        "000"
+                    ).slice(0, 3)
+                );
+
+            const timestamp =
+                Date.UTC(
+                    year,
+                    month - 1,
+                    day,
+                    hour,
+                    minute,
+                    second,
+                    milliseconds
+                );
+
+            return Number.isFinite(
+                timestamp
+            )
+                ? timestamp
+                : null;
+        }
+    }
+
+    const parsed =
+        Date.parse(text);
+
+    return Number.isFinite(parsed)
+        ? parsed
+        : null;
+}
+
+function getOpenTime(
+    instrument
+) {
     const attributes =
         getInstrumentAttributes(
             instrument
@@ -551,21 +730,14 @@ function getOpenTime(instrument) {
         instrument.OPEN_TIME ||
         instrument.open_time;
 
-    if (!value) {
-        return null;
-    }
-
-    const timestamp =
-        Date.parse(
-            String(value)
-        );
-
-    return Number.isFinite(timestamp)
-        ? timestamp
-        : null;
+    return parseCryptoDateTime(
+        value
+    );
 }
 
-function getCloseTime(instrument) {
+function getCloseTime(
+    instrument
+) {
     const attributes =
         getInstrumentAttributes(
             instrument
@@ -577,43 +749,88 @@ function getCloseTime(instrument) {
         instrument.CLOSE_TIME ||
         instrument.close_time;
 
-    if (!value) {
-        return null;
-    }
-
-    const timestamp =
-        Date.parse(
-            String(value)
-        );
-
-    return Number.isFinite(timestamp)
-        ? timestamp
-        : null;
+    return parseCryptoDateTime(
+        value
+    );
 }
 
-function isBTCStrikeInstrument(instrument) {
+function getInstrumentText(
+    instrument
+) {
+    try {
+        return JSON.stringify(
+            instrument
+        ).toUpperCase();
+    } catch {
+        return "";
+    }
+}
+
+function isDigitalCurrencyInstrument(
+    instrument
+) {
+    const productType =
+        String(
+            instrument?.product_type ||
+                ""
+        ).toUpperCase();
+
+    const detailProductType =
+        String(
+            instrument?.detail_product_type ||
+                ""
+        ).toUpperCase();
+
+    const securitySubType =
+        String(
+            instrument?.security_sub_type ||
+                ""
+        ).toUpperCase();
+
+    return (
+        productType ===
+            "DIGITAL_CURRENCIES" ||
+        detailProductType ===
+            "DIGITAL_CURRENCIES" ||
+        securitySubType ===
+            "BINARY_OPTION"
+    );
+}
+
+function isBTCStrikeInstrument(
+    instrument
+) {
     if (!instrument) {
         return false;
     }
 
+    const text =
+        getInstrumentText(
+            instrument
+        );
+
     const symbol =
         String(
-            instrument.symbol || ""
+            instrument.symbol ||
+                ""
         ).toUpperCase();
 
     const displayName =
         String(
-            instrument.display_name || ""
+            instrument.display_name ||
+                ""
         ).toUpperCase();
 
     const underlying =
         String(
-            instrument.underlying_symbol || ""
+            instrument.underlying_symbol ||
+                ""
         ).toUpperCase();
 
     const baseCurrency =
         String(
-            instrument.base_ccy || ""
+            instrument.base_ccy ||
+                ""
         ).toUpperCase();
 
     const eventName =
@@ -630,23 +847,85 @@ function isBTCStrikeInstrument(instrument) {
                 ""
         ).toUpperCase();
 
+    const metadata =
+        getEventMetadata(
+            instrument
+        );
+
     const metadataText =
         JSON.stringify(
-            getEventMetadata(
-                instrument
-            )
+            metadata
         ).toUpperCase();
 
-    const isBTC =
+    const attributes =
+        getInstrumentAttributes(
+            instrument
+        );
+
+    const attributesText =
+        JSON.stringify(
+            attributes
+        ).toUpperCase();
+
+    /*
+     * First identify actual digital-currency
+     * binary-option instruments.
+     *
+     * Crypto.com's DCM API exposes
+     * product_type and detail_product_type
+     * specifically for this purpose.
+     */
+
+    if (
+        !isDigitalCurrencyInstrument(
+            instrument
+        )
+    ) {
+        return false;
+    }
+
+    /*
+     * BTC may appear in different parts of the
+     * instrument depending on the DCM symbol/resource
+     * representation.
+     */
+
+    const directBTC =
         underlying.includes("BTC") ||
         symbol.includes("BTC") ||
         displayName.includes("BTC") ||
         baseCurrency === "BTC" ||
         eventName.includes("BTC") ||
         eventCode.includes("BTC") ||
-        metadataText.includes("BTC");
+        metadataText.includes("BTC") ||
+        attributesText.includes("BTC");
 
-    if (!isBTC) {
+    /*
+     * BTCUSD / XBTUSD / BTC-USD style representations.
+     */
+
+    const bitcoinPatterns = [
+        "BTCUSD",
+        "BTC-USD",
+        "BTC/USD",
+        "XBTUSD",
+        "XBT-USD",
+        "XBT/USD",
+        "BITCOIN"
+    ];
+
+    const alternateBTC =
+        bitcoinPatterns.some(
+            (pattern) =>
+                text.includes(
+                    pattern
+                )
+        );
+
+    if (
+        !directBTC &&
+        !alternateBTC
+    ) {
         return false;
     }
 
@@ -664,7 +943,9 @@ function isBTCStrikeInstrument(instrument) {
     );
 }
 
-function parseNumberFromText(value) {
+function parseNumberFromText(
+    value
+) {
     if (
         value === undefined ||
         value === null
@@ -693,18 +974,19 @@ function parseNumberFromText(value) {
 
     const numbers =
         matches
-            .map((item) =>
-                Number(
-                    item
-                        .replace(
-                            "$",
-                            ""
-                        )
-                        .replace(
-                            /,/g,
-                            ""
-                        )
-                )
+            .map(
+                (item) =>
+                    Number(
+                        item
+                            .replace(
+                                "$",
+                                ""
+                            )
+                            .replace(
+                                /,/g,
+                                ""
+                            )
+                    )
             )
             .filter(
                 Number.isFinite
@@ -719,7 +1001,13 @@ function parseNumberFromText(value) {
     );
 }
 
-function extractStrikePrice(instrument) {
+function extractStrikePrice(
+    instrument
+) {
+    /*
+     * Try explicit strike-price fields first.
+     */
+
     const possibleFields = [
         "strike_price",
         "strike",
@@ -727,14 +1015,19 @@ function extractStrikePrice(instrument) {
         "strikePrice",
         "strike_index_price",
         "STRIKE_VALUE",
-        "strike_value"
+        "strike_value",
+        "StrikePrice"
     ];
 
-    for (const field of possibleFields) {
+    for (
+        const field of
+            possibleFields
+    ) {
         if (
             instrument[field] !==
                 undefined &&
-            instrument[field] !== null
+            instrument[field] !==
+                null
         ) {
             const value =
                 parseNumberFromText(
@@ -759,7 +1052,8 @@ function extractStrikePrice(instrument) {
         "strike",
         "STRIKE_VALUE",
         "strike_value",
-        "strikePrice"
+        "strikePrice",
+        "StrikePrice"
     ];
 
     for (
@@ -769,7 +1063,8 @@ function extractStrikePrice(instrument) {
         if (
             attributes[field] !==
                 undefined &&
-            attributes[field] !== null
+            attributes[field] !==
+                null
         ) {
             const value =
                 parseNumberFromText(
@@ -782,9 +1077,18 @@ function extractStrikePrice(instrument) {
         }
     }
 
+    /*
+     * Search all attributes for a field that
+     * explicitly represents a strike price.
+     */
+
     for (
-        const [key, value] of
-        Object.entries(attributes)
+        const [
+            key,
+            value
+        ] of Object.entries(
+            attributes
+        )
     ) {
         const normalizedKey =
             String(key)
@@ -826,17 +1130,20 @@ function extractStrikePrice(instrument) {
         "strikeValue",
         "strike_value",
         "STRIKE_VALUE",
+        "StrikePrice",
         "price",
         "Price"
     ];
 
     for (
-        const key of metadataKeys
+        const key of
+            metadataKeys
     ) {
         if (
             metadata[key] !==
                 undefined &&
-            metadata[key] !== null
+            metadata[key] !==
+                null
         ) {
             const value =
                 parseNumberFromText(
@@ -849,9 +1156,18 @@ function extractStrikePrice(instrument) {
         }
     }
 
+    /*
+     * Search metadata for an explicitly named
+     * strike-price field.
+     */
+
     for (
-        const [key, value] of
-        Object.entries(metadata)
+        const [
+            key,
+            value
+        ] of Object.entries(
+            metadata
+        )
     ) {
         const normalizedKey =
             String(key)
@@ -879,6 +1195,14 @@ function extractStrikePrice(instrument) {
         }
     }
 
+    /*
+     * Display name fallback.
+     *
+     * Only accept values in a realistic BTC
+     * price range so we don't accidentally use
+     * period indexes, strike indexes, or IDs.
+     */
+
     const display =
         String(
             instrument.display_name ||
@@ -895,33 +1219,42 @@ function extractStrikePrice(instrument) {
     ) {
         const numbers =
             displayMatches
-                .map((value) =>
-                    Number(
-                        value
-                            .replace(
-                                "$",
-                                ""
-                            )
-                            .replace(
-                                /,/g,
-                                ""
-                            )
-                    )
+                .map(
+                    (value) =>
+                        Number(
+                            value
+                                .replace(
+                                    "$",
+                                    ""
+                                )
+                                .replace(
+                                    /,/g,
+                                    ""
+                                )
+                        )
                 )
                 .filter(
                     Number.isFinite
                 )
                 .filter(
                     (value) =>
-                        value > 1000
+                        value >= 10000 &&
+                        value <= 1000000
                 );
 
         if (numbers.length) {
-            return Math.max(
+            return Math.min(
                 ...numbers
             );
         }
     }
+
+    /*
+     * Symbol fallback.
+     *
+     * Do NOT use this unless the number is clearly
+     * in a BTC-price range.
+     */
 
     const symbol =
         String(
@@ -939,19 +1272,21 @@ function extractStrikePrice(instrument) {
     ) {
         const numbers =
             symbolMatches
-                .map((value) =>
-                    Number(value)
+                .map(
+                    (value) =>
+                        Number(value)
                 )
                 .filter(
                     Number.isFinite
                 )
                 .filter(
                     (value) =>
-                        value > 1000
+                        value >= 10000 &&
+                        value <= 1000000
                 );
 
         if (numbers.length) {
-            return Math.max(
+            return Math.min(
                 ...numbers
             );
         }
@@ -960,7 +1295,9 @@ function extractStrikePrice(instrument) {
     return null;
 }
 
-function normalizeInstrument(instrument) {
+function normalizeInstrument(
+    instrument
+) {
     const expiry =
         safeNumber(
             instrument.expiry_timestamp_ms
@@ -972,7 +1309,8 @@ function normalizeInstrument(instrument) {
         );
 
     return {
-        symbol: instrument.symbol,
+        symbol:
+            instrument.symbol,
 
         displayName:
             instrument.display_name,
@@ -983,7 +1321,9 @@ function normalizeInstrument(instrument) {
         expiry,
 
         expiryISO:
-            formatTimestamp(expiry),
+            formatTimestamp(
+                expiry
+            ),
 
         strikeIndex:
             getStrikeIndex(
@@ -1046,6 +1386,22 @@ function normalizeInstrument(instrument) {
         underlyingRoundingValue:
             attributes.UNDERLYING_ROUNDING_VALUE ||
             attributes.underlying_rounding_value ||
+            null,
+
+        productType:
+            instrument.product_type ||
+            null,
+
+        detailProductType:
+            instrument.detail_product_type ||
+            null,
+
+        securityType:
+            instrument.security_type ||
+            null,
+
+        securitySubType:
+            instrument.security_sub_type ||
             null
     };
 }
@@ -1058,13 +1414,15 @@ function selectCurrentContract(
 
     const candidates =
         instruments
-            .map(normalizeInstrument)
+            .map(
+                normalizeInstrument
+            )
             .filter(
                 (instrument) =>
                     instrument.expiry &&
                     instrument.expiry >
                         currentTime &&
-                    instrument.expiry - 
+                    instrument.expiry -
                         currentTime <=
                         CONFIG.contractSelectionHorizonMs
             )
@@ -1174,15 +1532,37 @@ async function getContractTicker(
         }
 
         return {
-            bid: safeNumber(ticker.b),
-            ask: safeNumber(ticker.k),
-            last: safeNumber(ticker.a),
-            bidSize: safeNumber(ticker.bs),
-            askSize: safeNumber(ticker.ks),
-            volume: safeNumber(ticker.v),
-            timestamp: safeNumber(ticker.t)
+            bid: safeNumber(
+                ticker.b
+            ),
+
+            ask: safeNumber(
+                ticker.k
+            ),
+
+            last: safeNumber(
+                ticker.a
+            ),
+
+            bidSize: safeNumber(
+                ticker.bs
+            ),
+
+            askSize: safeNumber(
+                ticker.ks
+            ),
+
+            volume: safeNumber(
+                ticker.v
+            ),
+
+            timestamp: safeNumber(
+                ticker.t
+            )
         };
-    } catch (exchangeError) {
+    } catch (
+        exchangeError
+    ) {
         try {
             const result =
                 await cryptoRequest(
@@ -1202,15 +1582,37 @@ async function getContractTicker(
             }
 
             return {
-                bid: safeNumber(ticker.b),
-                ask: safeNumber(ticker.k),
-                last: safeNumber(ticker.a),
-                bidSize: safeNumber(ticker.bs),
-                askSize: safeNumber(ticker.ks),
-                volume: safeNumber(ticker.v),
-                timestamp: safeNumber(ticker.t)
+                bid: safeNumber(
+                    ticker.b
+                ),
+
+                ask: safeNumber(
+                    ticker.k
+                ),
+
+                last: safeNumber(
+                    ticker.a
+                ),
+
+                bidSize: safeNumber(
+                    ticker.bs
+                ),
+
+                askSize: safeNumber(
+                    ticker.ks
+                ),
+
+                volume: safeNumber(
+                    ticker.v
+                ),
+
+                timestamp: safeNumber(
+                    ticker.t
+                )
             };
-        } catch (dcmError) {
+        } catch (
+            dcmError
+        ) {
             return null;
         }
     }
@@ -1245,13 +1647,19 @@ function updateTradeHistory(
 ) {
     for (const trade of trades) {
         const price =
-            safeNumber(trade.p);
+            safeNumber(
+                trade.p
+            );
 
         const quantity =
-            safeNumber(trade.q);
+            safeNumber(
+                trade.q
+            );
 
         const timestamp =
-            safeNumber(trade.t);
+            safeNumber(
+                trade.t
+            );
 
         if (
             price === null ||
@@ -1280,13 +1688,17 @@ function updateTradeHistory(
 
         tradeHistory.push({
             id: tradeId,
+
             price,
+
             quantity,
+
             side:
                 String(
                     trade.s ||
                         ""
                 ).toUpperCase(),
+
             timestamp
         });
     }
@@ -1313,12 +1725,16 @@ function calculateOrderBookMetrics(
     }
 
     const bids =
-        Array.isArray(book.bids)
+        Array.isArray(
+            book.bids
+        )
             ? book.bids
             : [];
 
     const asks =
-        Array.isArray(book.asks)
+        Array.isArray(
+            book.asks
+        )
             ? book.asks
             : [];
 
@@ -1328,10 +1744,11 @@ function calculateOrderBookMetrics(
     let bidVolume = 0;
     let askVolume = 0;
 
-    const levels = Math.max(
-        bids.length,
-        asks.length
-    );
+    const levels =
+        Math.max(
+            bids.length,
+            asks.length
+        );
 
     for (
         let i = 0;
@@ -1339,7 +1756,8 @@ function calculateOrderBookMetrics(
         i++
     ) {
         const weight =
-            1 / (i + 1);
+            1 /
+            (i + 1);
 
         const bid =
             bids[i];
@@ -1348,15 +1766,23 @@ function calculateOrderBookMetrics(
             asks[i];
 
         const bidQty =
-            Array.isArray(bid)
-                ? safeNumber(bid[1])
+            Array.isArray(
+                bid
+            )
+                ? safeNumber(
+                      bid[1]
+                  )
                 : safeNumber(
                       bid?.q
                   );
 
         const askQty =
-            Array.isArray(ask)
-                ? safeNumber(ask[1])
+            Array.isArray(
+                ask
+            )
+                ? safeNumber(
+                      ask[1]
+                  )
                 : safeNumber(
                       ask?.q
                   );
@@ -1364,19 +1790,23 @@ function calculateOrderBookMetrics(
         if (
             bidQty !== null
         ) {
-            bidVolume += bidQty;
+            bidVolume +=
+                bidQty;
 
             weightedBidVolume +=
-                bidQty * weight;
+                bidQty *
+                weight;
         }
 
         if (
             askQty !== null
         ) {
-            askVolume += askQty;
+            askVolume +=
+                askQty;
 
             weightedAskVolume +=
-                askQty * weight;
+                askQty *
+                weight;
         }
     }
 
@@ -1389,7 +1819,8 @@ function calculateOrderBookMetrics(
             ? (
                   weightedBidVolume -
                   weightedAskVolume
-              ) / total
+              ) /
+              total
             : 0;
 
     return {
@@ -1404,7 +1835,9 @@ function calculateOrderBookMetrics(
 function calculateTradeFlow() {
     const cutoff =
         now() -
-        3 * 60 * 1000;
+        3 *
+            60 *
+            1000;
 
     const recent =
         tradeHistory.filter(
@@ -1447,11 +1880,13 @@ function calculateTradeFlow() {
     return {
         buyVolume,
         sellVolume,
+
         imbalance:
             (
                 buyVolume -
                 sellVolume
-            ) / total
+            ) /
+            total
     };
 }
 
@@ -1475,6 +1910,7 @@ function priceAtOrBefore(
             result =
                 priceHistory[i]
                     .price;
+
             break;
         }
     }
@@ -1485,24 +1921,30 @@ function priceAtOrBefore(
 function calculateMomentum(
     currentPrice
 ) {
-    const nowTime = now();
+    const nowTime =
+        now();
 
     const price1m =
         priceAtOrBefore(
             nowTime -
-                60 * 1000
+                60 *
+                    1000
         );
 
     const price3m =
         priceAtOrBefore(
             nowTime -
-                3 * 60 * 1000
+                3 *
+                    60 *
+                    1000
         );
 
     const price5m =
         priceAtOrBefore(
             nowTime -
-                5 * 60 * 1000
+                5 *
+                    60 *
+                    1000
         );
 
     const momentum1m =
@@ -1531,7 +1973,8 @@ function calculateMomentum(
 }
 
 function calculateVolatility() {
-    const nowTime = now();
+    const nowTime =
+        now();
 
     const oneMinute =
         priceHistory
@@ -1539,7 +1982,8 @@ function calculateVolatility() {
                 (item) =>
                     item.timestamp >=
                     nowTime -
-                        60 * 1000
+                        60 *
+                            1000
             )
             .map(
                 (item) =>
@@ -1552,7 +1996,9 @@ function calculateVolatility() {
                 (item) =>
                     item.timestamp >=
                     nowTime -
-                        3 * 60 * 1000
+                        3 *
+                            60 *
+                            1000
             )
             .map(
                 (item) =>
@@ -1575,7 +2021,9 @@ function calculateVolatility() {
 function calculateVWAP() {
     const cutoff =
         now() -
-        5 * 60 * 1000;
+        5 *
+            60 *
+            1000;
 
     const recent =
         tradeHistory.filter(
@@ -1686,7 +2134,9 @@ function startRoundIfNeeded() {
         currentContract.expiry;
 
     const roundId =
-        createRoundId(expiry);
+        createRoundId(
+            expiry
+        );
 
     if (
         currentRound?.id ===
@@ -1743,9 +2193,7 @@ function startRoundIfNeeded() {
 }
 
 function secondsSinceRoundStart() {
-    if (
-        !currentRound
-    ) {
+    if (!currentRound) {
         return 0;
     }
 
@@ -1755,7 +2203,8 @@ function secondsSinceRoundStart() {
             (
                 now() -
                 currentRound.startedAt
-            ) / 1000
+            ) /
+                1000
         )
     );
 }
@@ -1806,7 +2255,8 @@ function calculateForecast() {
         state.strikePrice;
 
     const distance =
-        price - strike;
+        price -
+        strike;
 
     const volatility =
         state.volatility3m;
@@ -1841,7 +2291,8 @@ function calculateForecast() {
             normalizedDistance,
             -3,
             3
-        ) * 0.45;
+        ) *
+        0.45;
 
     if (
         volatility &&
@@ -1853,7 +2304,8 @@ function calculateForecast() {
                     volatility,
                 -3,
                 3
-            ) * 0.20;
+            ) *
+            0.20;
 
         score +=
             clamp(
@@ -1861,7 +2313,8 @@ function calculateForecast() {
                     volatility,
                 -3,
                 3
-            ) * 0.15;
+            ) *
+            0.15;
     }
 
     score +=
@@ -1869,14 +2322,16 @@ function calculateForecast() {
             orderFlow,
             -1,
             1
-        ) * 0.10;
+        ) *
+        0.10;
 
     score +=
         clamp(
             bookPressure,
             -1,
             1
-        ) * 0.10;
+        ) *
+        0.10;
 
     const secondsRemaining =
         state.secondsRemaining ??
@@ -1893,7 +2348,8 @@ function calculateForecast() {
 
     score *=
         0.75 +
-        timeFactor * 0.25;
+        timeFactor *
+            0.25;
 
     const probability =
         1 /
@@ -1906,8 +2362,10 @@ function calculateForecast() {
 
     const confidence =
         Math.abs(
-            probability - 0.5
-        ) * 2;
+            probability -
+                0.5
+        ) *
+        2;
 
     let forecast =
         "PASS";
@@ -1930,10 +2388,12 @@ function calculateForecast() {
         forecast;
 
     state.forecastProbability =
-        probability * 100;
+        probability *
+        100;
 
     state.forecastConfidence =
-        confidence * 100;
+        confidence *
+        100;
 
     state.modelScore =
         score;
@@ -1952,10 +2412,12 @@ function calculateForecast() {
             forecast;
 
         currentRound.forecastProbability =
-            probability * 100;
+            probability *
+            100;
 
         currentRound.forecastConfidence =
-            confidence * 100;
+            confidence *
+            100;
 
         currentRound.forecastTime =
             now();
@@ -1972,7 +2434,7 @@ function calculateStateMetrics() {
 
     if (
         state.strikePrice !==
-            null
+        null
     ) {
         state.strikeDistance =
             state.btcPrice -
@@ -2058,19 +2520,40 @@ async function refreshInstruments() {
             `[ODIN] DCM BINARY_OPTION instruments received: ${loadedInstruments.length}`
         );
 
+        /*
+         * First inspect how many digital-currency
+         * binary options Crypto.com returned.
+         */
+
+        const digitalCurrencyInstruments =
+            loadedInstruments.filter(
+                isDigitalCurrencyInstrument
+            );
+
+        console.log(
+            `[ODIN] Digital-currency Binary Options: ${digitalCurrencyInstruments.length}`
+        );
+
+        /*
+         * Now identify BTC using all of the available
+         * DCM metadata instead of assuming BTC must
+         * literally be part of the symbol.
+         */
+
         const btcInstruments =
             loadedInstruments.filter(
                 isBTCStrikeInstrument
             );
 
         console.log(
-            `[ODIN] BTC Strike candidates after BTC/operator filter: ${btcInstruments.length}`
+            `[ODIN] BTC Strike candidates after DCM metadata filter: ${btcInstruments.length}`
         );
 
         instruments =
             btcInstruments;
 
-        state.connected = true;
+        state.connected =
+            true;
 
         const normalizedBTC =
             btcInstruments.map(
@@ -2085,189 +2568,111 @@ async function refreshInstruments() {
             );
 
         console.log(
-            `[ODIN] BTC instruments with detected strikes: ${withStrikes.length}`
+            `[ODIN] BTC instruments with detected dollar strikes: ${withStrikes.length}`
         );
 
-        if (
-            loadedInstruments.length > 0 &&
-            btcInstruments.length === 0
-        ) {
-            /*
-             * The old diagnostic sampled the first 10
-             * instruments in the complete list.
-             *
-             * That was not useful because the first 10
-             * instruments may have nothing to do with BTC.
-             *
-             * Now we search ALL loaded BINARY_OPTION
-             * instruments for BTC appearing anywhere in
-             * the instrument JSON.
-             *
-             * This lets us see how Crypto.com is actually
-             * identifying BTC Strike Options.
-             */
+        /*
+         * Diagnostic #1:
+         *
+         * If BTC is still zero, inspect digital-currency
+         * instruments instead of dumping unrelated products.
+         */
 
-            const btcTextMatches =
-                loadedInstruments.filter(
-                    (instrument) =>
-                        JSON.stringify(
+        if (
+            digitalCurrencyInstruments.length >
+                0 &&
+            btcInstruments.length ===
+                0
+        ) {
+            const sample =
+                digitalCurrencyInstruments
+                    .slice(0, 25)
+                    .map(
+                        (
                             instrument
-                        )
-                            .toUpperCase()
-                            .includes("BTC")
-                );
+                        ) => ({
+                            symbol:
+                                instrument.symbol,
+
+                            displayName:
+                                instrument.display_name,
+
+                            underlying:
+                                instrument.underlying_symbol,
+
+                            baseCcy:
+                                instrument.base_ccy,
+
+                            quoteCcy:
+                                instrument.quote_ccy,
+
+                            productType:
+                                instrument.product_type,
+
+                            detailProductType:
+                                instrument.detail_product_type,
+
+                            securityType:
+                                instrument.security_type,
+
+                            securitySubType:
+                                instrument.security_sub_type,
+
+                            expiry:
+                                instrument.expiry_timestamp_ms,
+
+                            tradable:
+                                instrument.tradable,
+
+                            strikeOperator:
+                                getStrikeOperator(
+                                    instrument
+                                ),
+
+                            strikeIndex:
+                                getStrikeIndex(
+                                    instrument
+                                ),
+
+                            attributes:
+                                instrument.attributes,
+
+                            eventDetails:
+                                instrument.event_details
+                        })
+                    );
 
             console.log(
-                `[ODIN] Instruments containing BTC anywhere in raw JSON: ${btcTextMatches.length}`
+                "[ODIN] DIGITAL CURRENCY BINARY OPTION SAMPLE:",
+                JSON.stringify(
+                    sample,
+                    null,
+                    2
+                )
             );
-
-            if (
-                btcTextMatches.length > 0
-            ) {
-                const operatorCounts = {};
-
-                for (
-                    const instrument of
-                    btcTextMatches
-                ) {
-                    const operator =
-                        getStrikeOperator(
-                            instrument
-                        ) ||
-                        "NONE";
-
-                    operatorCounts[
-                        operator
-                    ] =
-                        (
-                            operatorCounts[
-                                operator
-                            ] ||
-                            0
-                        ) + 1;
-                }
-
-                console.log(
-                    "[ODIN] BTC raw operator counts:",
-                    JSON.stringify(
-                        operatorCounts,
-                        null,
-                        2
-                    )
-                );
-
-                const btcSample =
-                    btcTextMatches
-                        .slice(0, 20)
-                        .map(
-                            (instrument) => ({
-                                symbol:
-                                    instrument.symbol,
-
-                                instType:
-                                    instrument.inst_type,
-
-                                underlying:
-                                    instrument.underlying_symbol,
-
-                                baseCcy:
-                                    instrument.base_ccy,
-
-                                productType:
-                                    instrument.product_type,
-
-                                detailProductType:
-                                    instrument.detail_product_type,
-
-                                displayName:
-                                    instrument.display_name,
-
-                                expiry:
-                                    instrument.expiry_timestamp_ms,
-
-                                tradable:
-                                    instrument.tradable,
-
-                                strikeOperator:
-                                    getStrikeOperator(
-                                        instrument
-                                    ),
-
-                                strikeIndex:
-                                    getStrikeIndex(
-                                        instrument
-                                    ),
-
-                                strikePrice:
-                                    extractStrikePrice(
-                                        instrument
-                                    ),
-
-                                attributes:
-                                    instrument.attributes,
-
-                                eventDetails:
-                                    instrument.event_details
-                            })
-                        );
-
-                console.log(
-                    "[ODIN] BTC RAW MATCHES SAMPLE:",
-                    JSON.stringify(
-                        btcSample,
-                        null,
-                        2
-                    )
-                );
-            } else {
-                console.log(
-                    "[ODIN] ZERO instruments contain the text BTC anywhere in their raw JSON."
-                );
-
-                const productTypeCounts = {};
-
-                for (
-                    const instrument of
-                    loadedInstruments
-                ) {
-                    const productType =
-                        instrument.product_type ||
-                        "NONE";
-
-                    const detailProductType =
-                        instrument.detail_product_type ||
-                        "NONE";
-
-                    const key =
-                        `${productType} / ${detailProductType}`;
-
-                    productTypeCounts[key] =
-                        (
-                            productTypeCounts[key] ||
-                            0
-                        ) + 1;
-                }
-
-                console.log(
-                    "[ODIN] Product type counts:",
-                    JSON.stringify(
-                        productTypeCounts,
-                        null,
-                        2
-                    )
-                );
-            }
         }
 
+        /*
+         * Diagnostic #2:
+         *
+         * If BTC candidates exist but no dollar
+         * strike was found, show exactly what the
+         * instrument contains.
+         */
+
         if (
-            btcInstruments.length > 0 &&
-            withStrikes.length === 0
+            btcInstruments.length >
+                0 &&
+            withStrikes.length ===
+                0
         ) {
             const sample =
                 btcInstruments
-                    .slice(0, 10)
+                    .slice(0, 20)
                     .map(
-                        (instrument) => ({
+                        (
+                            instrument
+                        ) => ({
                             symbol:
                                 instrument.symbol,
 
@@ -2283,6 +2688,16 @@ async function refreshInstruments() {
                             tradable:
                                 instrument.tradable,
 
+                            strikeOperator:
+                                getStrikeOperator(
+                                    instrument
+                                ),
+
+                            strikeIndex:
+                                getStrikeIndex(
+                                    instrument
+                                ),
+
                             normalized:
                                 normalizeInstrument(
                                     instrument
@@ -2297,13 +2712,119 @@ async function refreshInstruments() {
                     );
 
             console.log(
-                "[ODIN] BTC Strike instruments exist, but Odin could not detect their dollar strike prices. SAMPLE:",
+                "[ODIN] BTC instruments found, but no dollar strike detected:",
                 JSON.stringify(
                     sample,
                     null,
                     2
                 )
             );
+        }
+
+        /*
+         * Diagnostic #3:
+         *
+         * Show BTC-like raw instruments if our filter
+         * somehow misses them.
+         */
+
+        if (
+            btcInstruments.length ===
+                0 &&
+            digitalCurrencyInstruments.length ===
+                0
+        ) {
+            const rawBTCMatches =
+                loadedInstruments.filter(
+                    (instrument) => {
+                        const text =
+                            getInstrumentText(
+                                instrument
+                            );
+
+                        return (
+                            text.includes(
+                                "BTC"
+                            ) ||
+                            text.includes(
+                                "BITCOIN"
+                            ) ||
+                            text.includes(
+                                "XBT"
+                            )
+                        );
+                    }
+                );
+
+            console.log(
+                `[ODIN] Raw BTC/XBT/BITCOIN matches across all Binary Options: ${rawBTCMatches.length}`
+            );
+
+            if (
+                rawBTCMatches.length >
+                0
+            ) {
+                const sample =
+                    rawBTCMatches
+                        .slice(0, 20)
+                        .map(
+                            (
+                                instrument
+                            ) => ({
+                                symbol:
+                                    instrument.symbol,
+
+                                displayName:
+                                    instrument.display_name,
+
+                                underlying:
+                                    instrument.underlying_symbol,
+
+                                baseCcy:
+                                    instrument.base_ccy,
+
+                                productType:
+                                    instrument.product_type,
+
+                                detailProductType:
+                                    instrument.detail_product_type,
+
+                                securityType:
+                                    instrument.security_type,
+
+                                securitySubType:
+                                    instrument.security_sub_type,
+
+                                expiry:
+                                    instrument.expiry_timestamp_ms,
+
+                                strikeOperator:
+                                    getStrikeOperator(
+                                        instrument
+                                    ),
+
+                                strikeIndex:
+                                    getStrikeIndex(
+                                        instrument
+                                    ),
+
+                                attributes:
+                                    instrument.attributes,
+
+                                eventDetails:
+                                    instrument.event_details
+                            })
+                        );
+
+                console.log(
+                    "[ODIN] RAW BTC-LIKE SAMPLE:",
+                    JSON.stringify(
+                        sample,
+                        null,
+                        2
+                    )
+                );
+            }
         }
 
         console.log(
@@ -2335,8 +2856,10 @@ async function resolveCurrentContract() {
 
     if (!selected) {
         if (
-            instruments.length > 0 &&
-            now() - lastNoContractLog >
+            instruments.length >
+                0 &&
+            now() -
+                lastNoContractLog >
                 15000
         ) {
             lastNoContractLog =
@@ -2424,7 +2947,8 @@ async function resolveCurrentContract() {
                 (
                     selected.expiry -
                     now()
-                ) / 1000
+                ) /
+                    1000
             )
         );
 }
@@ -2444,19 +2968,22 @@ async function collectMarketData() {
         ]);
 
         if (
-            index?.price !== null
+            index?.price !==
+            null
         ) {
             state.btcIndexPrice =
                 index.price;
         }
 
         if (
-            ticker?.last !== null
+            ticker?.last !==
+            null
         ) {
             state.btcPrice =
                 ticker.last;
         } else if (
-            index?.price !== null
+            index?.price !==
+            null
         ) {
             state.btcPrice =
                 index.price;
@@ -2483,7 +3010,9 @@ async function collectMarketData() {
                 bookMetrics.imbalance;
 
             orderBookHistory.push({
-                timestamp: now(),
+                timestamp:
+                    now(),
+
                 ...bookMetrics
             });
 
@@ -2559,18 +3088,22 @@ async function collectContractData() {
             ticker.ask;
 
         if (
-            ticker.bid !== null &&
-            ticker.ask !== null
+            ticker.bid !==
+                null &&
+            ticker.ask !==
+                null
         ) {
             state.contractMid =
                 (
                     ticker.bid +
                     ticker.ask
-                ) / 2;
+                ) /
+                2;
 
             state.marketProbability =
                 clamp(
-                    state.contractMid * 10,
+                    state.contractMid *
+                        10,
                     0,
                     100
                 );
@@ -2579,9 +3112,11 @@ async function collectContractData() {
                 ticker.last;
 
             state.marketProbability =
-                ticker.last !== null
+                ticker.last !==
+                null
                     ? clamp(
-                          ticker.last * 10,
+                          ticker.last *
+                              10,
                           0,
                           100
                       )
@@ -2675,11 +3210,9 @@ function evaluateExpiredRound() {
     currentRound.resolvedAt =
         now();
 
-    completedRounds.push(
-        {
-            ...currentRound
-        }
-    );
+    completedRounds.push({
+        ...currentRound
+    });
 
     while (
         completedRounds.length >
@@ -2733,18 +3266,21 @@ function getPerformance() {
         ).length;
 
     const total =
-        wins + losses;
+        wins +
+        losses;
 
     return {
         wins,
         losses,
         total,
+
         accuracy:
             total > 0
                 ? (
                       wins /
                       total
-                  ) * 100
+                  ) *
+                  100
                 : null
     };
 }
@@ -2855,6 +3391,7 @@ app.get(
         res.json({
             rounds:
                 completedRounds,
+
             performance:
                 getPerformance()
         });
@@ -2899,10 +3436,15 @@ app.get(
     "/api/health",
     (req, res) => {
         res.json({
-            status: "online",
-            service: "ODIN",
+            status:
+                "online",
+
+            service:
+                "ODIN",
+
             connected:
                 state.connected,
+
             time:
                 new Date().toISOString()
         });
