@@ -916,6 +916,100 @@ function extractStrikePrice(
         }
     }
 
+    /*
+     * Crypto.com's Strike Option display names can
+     * expose the strike directly without a dollar sign,
+     * for example:
+     *
+     * "BITCOIN >73000 (4AM)"
+     * "BITCOIN >70000 (4AM)"
+     *
+     * Detect that format explicitly before using a broad
+     * numeric fallback.
+     */
+
+    const displayName =
+        String(
+            instrument.display_name ||
+                ""
+        ).toUpperCase();
+
+    const displayStrikeMatch =
+        displayName.match(
+            /(?:BITCOIN|BTC|XBT)\s*[<>]=?\s*\$?([0-9][0-9,]*(?:\.[0-9]+)?)/
+        );
+
+    if (
+        displayStrikeMatch
+    ) {
+        const parsed =
+            safeNumber(
+                displayStrikeMatch[1]
+                    .replace(
+                        /,/g,
+                        ""
+                    )
+            );
+
+        if (
+            parsed !==
+                null &&
+            parsed >= 10000 &&
+            parsed <= 1000000
+        ) {
+            return parsed;
+        }
+    }
+
+    /*
+     * Final fallback for Strike Option names that contain
+     * a standalone BTC strike value. Ignore small values
+     * and large timestamps so values such as 70000 or 73000
+     * can be recovered safely.
+     */
+
+    const displayMatches =
+        displayName.match(
+            /\$?[0-9][0-9,]*(?:\.[0-9]+)?/g
+        );
+
+    if (
+        displayMatches?.length
+    ) {
+        const numbers =
+            displayMatches
+                .map(
+                    (value) =>
+                        safeNumber(
+                            value
+                                .replace(
+                                    /\$/g,
+                                    ""
+                                )
+                                .replace(
+                                    /,/g,
+                                    ""
+                                )
+                        )
+                )
+                .filter(
+                    Number.isFinite
+                )
+                .filter(
+                    (value) =>
+                        value >= 10000 &&
+                        value <= 1000000
+                );
+
+        if (
+            numbers.length
+        ) {
+            return Math.min(
+                ...numbers
+            );
+        }
+    }
+
     return null;
 }
 
