@@ -40,7 +40,36 @@ const CONFIG = {
     maxTradeHistory: 900,
     maxOrderBookHistory: 300,
 
-    forecastHistoryLimit: 500
+    forecastHistoryLimit: 500,
+
+    /*
+     * PAPER FORECAST LOCK
+     *
+     * Odin must see the same direction repeatedly before
+     * allowing a paper forecast to become locked.
+     *
+     * This is a stability safeguard for the paper model.
+     * It is NOT a guarantee of prediction accuracy.
+     */
+
+    forecastStabilityRequired: 3,
+
+    /*
+     * Keep weak signals neutral.
+     *
+     * Odin will remain WAIT instead of forcing YES/NO when
+     * the model is too close to the middle.
+     */
+
+    minimumForecastConfidence: 8,
+
+    /*
+     * Market/index integrity safeguards.
+     */
+
+    maxIndexAgeMs: 10000,
+
+    maxIndexPerpDifferencePct: 1.5
 };
 
 let state = {
@@ -96,7 +125,30 @@ let state = {
 
     collectionStartedAt: null,
 
-    activeRoundId: null
+    activeRoundId: null,
+
+    /*
+     * PAPER LOCK STATE
+     */
+
+    forecastLocked: false,
+    lockedForecast: null,
+    lockedProbability: null,
+    lockedConfidence: null,
+    lockedAt: null,
+    lockedContractSymbol: null,
+    lockedContractExpiry: null,
+
+    /*
+     * Data-integrity warning.
+     *
+     * This is deliberately not a buy/sell command.
+     * It only indicates that Odin should not trust its
+     * current paper forecast.
+     */
+
+    paperEmergency: false,
+    paperEmergencyReason: null
 };
 
 const priceHistory = [];
@@ -807,9 +859,6 @@ function isBTCStrikeInstrument(
      * for example:
      *
      * "BITCOIN >73000 (4AM)"
-     *
-     * The DCM instrument payload may not provide
-     * STRIKE_OPERATOR as a separate field.
      */
 
     const displayOperatorMatch =
@@ -930,11 +979,7 @@ function extractStrikePrice(
 
     /*
      * Crypto.com's Strike Option display names can
-     * expose the strike directly without a dollar sign,
-     * for example:
-     *
-     * "BITCOIN >73000 (4AM)"
-     * "BITCOIN >70000 (4AM)"
+     * expose the strike directly without a dollar sign.
      */
 
     const displayName =
@@ -1352,12 +1397,11 @@ async function refreshInstruments() {
         /*
          * IMPORTANT:
          *
-         * If Odin is already collecting data for a contract,
-         * keep that exact contract instead of selecting a new
-         * strike simply because BTC moved closer to another one.
+         * If Odin is already collecting or forecasting
+         * a paper round, keep that exact contract.
          *
-         * This prevents the 3-minute collection period from
-         * constantly restarting.
+         * BTC movement must NOT cause the round to jump
+         * to another strike.
          */
 
         const lockedContractSymbol =
@@ -1980,6 +2024,131 @@ function calculateTradeFlow() {
     };
 }
 
+function checkDataIntegrity() {
+    const reasons = [];
+
+    if (
+        state.btcPrice === null
+    ) {
+        reasons.push(
+            "BTC perp price unavailable"
+        );
+    }
+
+    if (
+        state.btcIndexPrice === null
+    ) {
+        reasons.push(
+            "BTC index unavailable"
+        );
+    }
+
+    if (
+        state.lastUpdate === null
+    ) {
+        reasons.push(
+            "market data has not updated"
+        );
+    } else if (
+        now() -
+            state.lastUpdate >
+        CONFIG.maxIndexAgeMs
+    ) {
+        reasons.push(
+            "market data is stale"
+        );
+    }
+
+    /*
+     * The index timestamp is checked separately.
+     */
+
+    if (
+        state.btcIndexTimestamp !==
+            undefined &&
+        state.btcIndexTimestamp !==
+            null
+    ) {
+        const indexAge =
+            now() -
+            state.btcIndexTimestamp;
+
+        if (
+            indexAge >
+            CONFIG.maxIndexAgeMs
+        ) {
+            reasons.push(
+                "BTC index timestamp is stale"
+            );
+        }
+    }
+
+    /*
+     * This is only a data-integrity warning.
+     * It does NOT tell the user to buy or sell.
+     */
+
+    if (
+        state.btcIndexPrice !== null &&
+        state.btcPrice !== null &&
+        state.btcPrice !== 0
+    ) {
+        const differencePct =
+            Math.abs(
+                (
+                    (
+                        state.btcIndexPrice -
+                        state.btcPrice
+                    ) /
+                    state.btcPrice
+                ) *
+                100
+            );
+
+        if (
+            differencePct >
+            CONFIG.maxIndexPerpDifferencePct
+        ) {
+            reasons.push(
+                "BTC index/perpetual price divergence is unusually large"
+            );
+        }
+    }
+
+    if (
+        state.dataQuality <
+        70
+    ) {
+        reasons.push(
+            "data quality is below the paper-model threshold"
+        );
+    }
+
+    if (
+        !priceHistory.length
+    ) {
+        reasons.push(
+            "insufficient BTC price history"
+        );
+    }
+
+    state.paperEmergency =
+        reasons.length >
+        0;
+
+    state.paperEmergencyReason =
+        reasons.length
+            ? reasons.join(
+                  "; "
+              )
+            : null;
+
+    return (
+        reasons.length ===
+        0
+    );
+}
+
 async function collectMarketData() {
     try {
         const [
@@ -2002,6 +2171,9 @@ async function collectMarketData() {
         ) {
             state.btcIndexPrice =
                 index.price;
+
+            state.btcIndexTimestamp =
+                index.timestamp;
         }
 
         if (
@@ -2173,8 +2345,7 @@ function secondsSinceRoundStart() {
         (
             now() -
             currentRound.startedAt
-        ) /
-            1000
+        ) / 1000
     );
 }
 
@@ -2374,6 +2545,34 @@ function startNewRound() {
         forecastMade:
             false,
 
+        /*
+         * Lock bookkeeping.
+         */
+
+        forecastLocked:
+            false,
+
+        lockedForecast:
+            null,
+
+        lockedProbability:
+            null,
+
+        lockedConfidence:
+            null,
+
+        lockedAt:
+            null,
+
+        stabilityDirection:
+            null,
+
+        stabilityCount:
+            0,
+
+        lastCandidateProbability:
+            null,
+
         result:
             null
     };
@@ -2383,6 +2582,33 @@ function startNewRound() {
 
     state.collectionStartedAt =
         now();
+
+    state.forecastLocked =
+        false;
+
+    state.lockedForecast =
+        null;
+
+    state.lockedProbability =
+        null;
+
+    state.lockedConfidence =
+        null;
+
+    state.lockedAt =
+        null;
+
+    state.lockedContractSymbol =
+        currentRound.symbol;
+
+    state.lockedContractExpiry =
+        currentRound.expiry;
+
+    state.paperEmergency =
+        false;
+
+    state.paperEmergencyReason =
+        null;
 
     state.phase =
         "COLLECTING";
@@ -2423,6 +2649,29 @@ function calculateForecast() {
         return;
     }
 
+    /*
+     * Once the paper forecast is locked, NEVER recalculate
+     * or flip its direction during the same contract.
+     */
+
+    if (
+        currentRound.forecastLocked
+    ) {
+        state.phase =
+            "LOCKED";
+
+        state.forecast =
+            currentRound.lockedForecast;
+
+        state.forecastProbability =
+            currentRound.lockedProbability;
+
+        state.forecastConfidence =
+            currentRound.lockedConfidence;
+
+        return;
+    }
+
     const elapsed =
         secondsSinceRoundStart();
 
@@ -2432,6 +2681,28 @@ function calculateForecast() {
     ) {
         state.phase =
             "COLLECTING";
+
+        state.forecast =
+            "WAIT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        return;
+    }
+
+    /*
+     * Do not create a paper pick when data integrity is bad.
+     */
+
+    if (
+        !checkDataIntegrity()
+    ) {
+        state.phase =
+            "DATA_WARNING";
 
         state.forecast =
             "WAIT";
@@ -2564,38 +2835,173 @@ function calculateForecast() {
             99
         );
 
-    state.forecastProbability =
-        probability;
-
-    state.forecastConfidence =
+    const confidence =
         Math.abs(
             probability -
                 50
         );
 
-    state.forecast =
+    state.forecastProbability =
+        probability;
+
+    state.forecastConfidence =
+        confidence;
+
+    /*
+     * Neutral zone.
+     *
+     * Odin refuses to force a direction when the signal
+     * is not strong enough.
+     */
+
+    if (
+        confidence <
+        CONFIG.minimumForecastConfidence
+    ) {
+        currentRound.stabilityDirection =
+            null;
+
+        currentRound.stabilityCount =
+            0;
+
+        currentRound.lastCandidateProbability =
+            probability;
+
+        state.forecast =
+            "WAIT";
+
+        state.phase =
+            "FORECASTING";
+
+        console.log(
+            `[ODIN] Paper forecast remains WAIT | Confidence ${confidence.toFixed(2)}% is below stability threshold`
+        );
+
+        return;
+    }
+
+    const candidate =
         probability >=
         50
             ? "YES"
             : "NO";
 
+    /*
+     * Stability counter.
+     *
+     * The same candidate must appear repeatedly.
+     * If the model changes sides, the counter resets.
+     */
+
+    if (
+        currentRound.stabilityDirection ===
+        candidate
+    ) {
+        currentRound.stabilityCount +=
+            1;
+    } else {
+        currentRound.stabilityDirection =
+            candidate;
+
+        currentRound.stabilityCount =
+            1;
+    }
+
+    currentRound.lastCandidateProbability =
+        probability;
+
+    state.forecast =
+        "WAIT";
+
+    /*
+     * The direction is not locked until it survives
+     * the required number of consecutive calculations.
+     */
+
+    if (
+        currentRound.stabilityCount <
+        CONFIG.forecastStabilityRequired
+    ) {
+        state.phase =
+            "FORECASTING";
+
+        console.log(
+            `[ODIN] Candidate ${candidate} | Stability ${currentRound.stabilityCount}/${CONFIG.forecastStabilityRequired} | Probability: ${probability.toFixed(2)}%`
+        );
+
+        return;
+    }
+
+    /*
+     * LOCK THE PAPER FORECAST.
+     *
+     * From this point forward the direction belongs to
+     * this exact contract and cannot flip simply because
+     * BTC moves.
+     */
+
     currentRound.forecast =
-        state.forecast;
+        candidate;
 
     currentRound.forecastProbability =
-        state.forecastProbability;
+        probability;
 
     currentRound.confidence =
-        state.forecastConfidence;
+        confidence;
 
     currentRound.forecastMade =
         true;
 
+    currentRound.forecastLocked =
+        true;
+
+    currentRound.lockedForecast =
+        candidate;
+
+    currentRound.lockedProbability =
+        probability;
+
+    currentRound.lockedConfidence =
+        confidence;
+
+    currentRound.lockedAt =
+        now();
+
+    state.forecast =
+        candidate;
+
+    state.forecastProbability =
+        probability;
+
+    state.forecastConfidence =
+        confidence;
+
+    state.forecastLocked =
+        true;
+
+    state.lockedForecast =
+        candidate;
+
+    state.lockedProbability =
+        probability;
+
+    state.lockedConfidence =
+        confidence;
+
+    state.lockedAt =
+        now();
+
+    state.lockedContractSymbol =
+        currentRound.symbol;
+
+    state.lockedContractExpiry =
+        currentRound.expiry;
+
     state.phase =
-        "FORECASTING";
+        "LOCKED";
 
     console.log(
-        `[ODIN] PREDICTION MADE | ${state.forecast} | Probability: ${probability.toFixed(2)}% | Score: ${score.toFixed(2)} | BTC: ${state.btcPrice} | Index: ${state.btcIndexPrice} | Strike: ${state.strikePrice}`
+        `[ODIN] PAPER FORECAST LOCKED | ${candidate} | Probability: ${probability.toFixed(2)}% | Confidence: ${confidence.toFixed(2)}% | Contract: ${currentRound.symbol} | Stability: ${currentRound.stabilityCount}/${CONFIG.forecastStabilityRequired}`
     );
 }
 
@@ -2610,12 +3016,12 @@ function resolveCurrentContract() {
     }
 
     /*
-     * Once a paper round exists, keep using that exact
-     * contract until it expires.
+     * LOCKED CONTRACT SYSTEM
      *
-     * This prevents BTC movement from replacing the
-     * contract every second and resetting the 3-minute
-     * collection period.
+     * Once a paper round exists, Odin must continue using
+     * that exact instrument until the round expires.
+     *
+     * BTC movement cannot cause a new strike to be selected.
      */
 
     if (
@@ -2689,9 +3095,22 @@ function resolveCurrentContract() {
                     state.contractExpiry
                 );
 
+            state.lockedContractSymbol =
+                currentRound.symbol;
+
+            state.lockedContractExpiry =
+                currentRound.expiry;
+
             return;
         }
     }
+
+    /*
+     * No active round exists.
+     *
+     * This is the ONLY normal point where Odin chooses a
+     * fresh contract.
+     */
 
     const selected =
         selectCurrentContract(
@@ -2706,10 +3125,6 @@ function resolveCurrentContract() {
 
         return;
     }
-
-    const previousSymbol =
-        currentContract?.instrument
-            ?.symbol;
 
     currentContract =
         selected;
@@ -2742,22 +3157,14 @@ function resolveCurrentContract() {
               )
             : null;
 
-    if (
-        previousSymbol !==
-        instrument.symbol
-    ) {
-        console.log(
-            `[ODIN] Active contract changed: ${instrument.symbol}`
-        );
-
-        currentRound =
-            null;
-    }
-
     state.activeRoundId =
         createRoundId(
             state.contractExpiry
         );
+
+    console.log(
+        `[ODIN] Fresh paper contract selected: ${instrument.symbol}`
+    );
 }
 
 function evaluateExpiredRound() {
@@ -2858,6 +3265,9 @@ function evaluateExpiredRound() {
     currentRound =
         null;
 
+    currentContract =
+        null;
+
     state.forecast =
         "WAIT";
 
@@ -2867,8 +3277,32 @@ function evaluateExpiredRound() {
     state.forecastConfidence =
         null;
 
+    state.forecastLocked =
+        false;
+
+    state.lockedForecast =
+        null;
+
+    state.lockedProbability =
+        null;
+
+    state.lockedConfidence =
+        null;
+
+    state.lockedAt =
+        null;
+
+    state.lockedContractSymbol =
+        null;
+
+    state.lockedContractExpiry =
+        null;
+
     state.activeRoundId =
         null;
+
+    state.phase =
+        "WAITING";
 }
 
 function getPerformance() {
@@ -2922,6 +3356,16 @@ function serializeState() {
         contractExpiryISO:
             formatTimestamp(
                 state.contractExpiry
+            ),
+
+        lockedAtISO:
+            formatTimestamp(
+                state.lockedAt
+            ),
+
+        lockedContractExpiryISO:
+            formatTimestamp(
+                state.lockedContractExpiry
             ),
 
         collectionElapsed:
@@ -3166,6 +3610,10 @@ server.listen(
 
         console.log(
             "Collection phase: 3 minutes"
+        );
+
+        console.log(
+            "Forecast lock: 3 consecutive signals"
         );
 
         console.log(
