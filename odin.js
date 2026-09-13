@@ -1064,7 +1064,7 @@ function selectCurrentContract(
                     instrument.expiry &&
                     instrument.expiry >
                         currentTime &&
-                    instrument.expiry -
+                    instrument.expiry - 
                         currentTime <=
                         CONFIG.contractSelectionHorizonMs
             )
@@ -2092,58 +2092,171 @@ async function refreshInstruments() {
             loadedInstruments.length > 0 &&
             btcInstruments.length === 0
         ) {
-            const sample =
-                loadedInstruments
-                    .slice(0, 10)
-                    .map(
-                        (instrument) => ({
-                            symbol:
-                                instrument.symbol,
+            /*
+             * The old diagnostic sampled the first 10
+             * instruments in the complete list.
+             *
+             * That was not useful because the first 10
+             * instruments may have nothing to do with BTC.
+             *
+             * Now we search ALL loaded BINARY_OPTION
+             * instruments for BTC appearing anywhere in
+             * the instrument JSON.
+             *
+             * This lets us see how Crypto.com is actually
+             * identifying BTC Strike Options.
+             */
 
-                            instType:
-                                instrument.inst_type,
-
-                            underlying:
-                                instrument.underlying_symbol,
-
-                            baseCcy:
-                                instrument.base_ccy,
-
-                            displayName:
-                                instrument.display_name,
-
-                            expiry:
-                                instrument.expiry_timestamp_ms,
-
-                            tradable:
-                                instrument.tradable,
-
-                            operator:
-                                getStrikeOperator(
-                                    instrument
-                                ),
-
-                            strikeIndex:
-                                getStrikeIndex(
-                                    instrument
-                                ),
-
-                            attributes:
-                                instrument.attributes,
-
-                            eventDetails:
-                                instrument.event_details
-                        })
-                    );
+            const btcTextMatches =
+                loadedInstruments.filter(
+                    (instrument) =>
+                        JSON.stringify(
+                            instrument
+                        )
+                            .toUpperCase()
+                            .includes("BTC")
+                );
 
             console.log(
-                "[ODIN] No BTC Strike instruments passed the filter. SAMPLE:",
-                JSON.stringify(
-                    sample,
-                    null,
-                    2
-                )
+                `[ODIN] Instruments containing BTC anywhere in raw JSON: ${btcTextMatches.length}`
             );
+
+            if (
+                btcTextMatches.length > 0
+            ) {
+                const operatorCounts = {};
+
+                for (
+                    const instrument of
+                    btcTextMatches
+                ) {
+                    const operator =
+                        getStrikeOperator(
+                            instrument
+                        ) ||
+                        "NONE";
+
+                    operatorCounts[
+                        operator
+                    ] =
+                        (
+                            operatorCounts[
+                                operator
+                            ] ||
+                            0
+                        ) + 1;
+                }
+
+                console.log(
+                    "[ODIN] BTC raw operator counts:",
+                    JSON.stringify(
+                        operatorCounts,
+                        null,
+                        2
+                    )
+                );
+
+                const btcSample =
+                    btcTextMatches
+                        .slice(0, 20)
+                        .map(
+                            (instrument) => ({
+                                symbol:
+                                    instrument.symbol,
+
+                                instType:
+                                    instrument.inst_type,
+
+                                underlying:
+                                    instrument.underlying_symbol,
+
+                                baseCcy:
+                                    instrument.base_ccy,
+
+                                productType:
+                                    instrument.product_type,
+
+                                detailProductType:
+                                    instrument.detail_product_type,
+
+                                displayName:
+                                    instrument.display_name,
+
+                                expiry:
+                                    instrument.expiry_timestamp_ms,
+
+                                tradable:
+                                    instrument.tradable,
+
+                                strikeOperator:
+                                    getStrikeOperator(
+                                        instrument
+                                    ),
+
+                                strikeIndex:
+                                    getStrikeIndex(
+                                        instrument
+                                    ),
+
+                                strikePrice:
+                                    extractStrikePrice(
+                                        instrument
+                                    ),
+
+                                attributes:
+                                    instrument.attributes,
+
+                                eventDetails:
+                                    instrument.event_details
+                            })
+                        );
+
+                console.log(
+                    "[ODIN] BTC RAW MATCHES SAMPLE:",
+                    JSON.stringify(
+                        btcSample,
+                        null,
+                        2
+                    )
+                );
+            } else {
+                console.log(
+                    "[ODIN] ZERO instruments contain the text BTC anywhere in their raw JSON."
+                );
+
+                const productTypeCounts = {};
+
+                for (
+                    const instrument of
+                    loadedInstruments
+                ) {
+                    const productType =
+                        instrument.product_type ||
+                        "NONE";
+
+                    const detailProductType =
+                        instrument.detail_product_type ||
+                        "NONE";
+
+                    const key =
+                        `${productType} / ${detailProductType}`;
+
+                    productTypeCounts[key] =
+                        (
+                            productTypeCounts[key] ||
+                            0
+                        ) + 1;
+                }
+
+                console.log(
+                    "[ODIN] Product type counts:",
+                    JSON.stringify(
+                        productTypeCounts,
+                        null,
+                        2
+                    )
+                );
+            }
         }
 
         if (
