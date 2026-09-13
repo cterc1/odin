@@ -54,6 +54,8 @@ const CONFIG = {
 
     minimumDataQuality: 85,
 
+    minimumForecastSignals: 3,
+
     maxIndexAgeMs: 5000,
 
     /*
@@ -287,6 +289,105 @@ function ensureDataDirectory() {
     }
 }
 
+function rebuildDailyRecordsFromHistory() {
+    const reconstructed = {};
+
+    for (const round of completedRounds) {
+        if (
+            !round ||
+            (round.result !== "WIN" &&
+                round.result !== "LOSS") ||
+            round.officialRecordCounted !== true
+        ) {
+            continue;
+        }
+
+        const dateKey =
+            getEasternDateKey(
+                round.resolvedAt ||
+                    round.expiry ||
+                    now()
+            );
+
+        if (!isOfficialRecordDate(dateKey)) {
+            continue;
+        }
+
+        if (!reconstructed[dateKey]) {
+            reconstructed[dateKey] = {
+                wins: 0,
+                losses: 0,
+                total: 0,
+                closed: 0
+            };
+        }
+
+        reconstructed[dateKey].total += 1;
+        reconstructed[dateKey].closed += 1;
+
+        if (round.result === "WIN") {
+            reconstructed[dateKey].wins += 1;
+        } else {
+            reconstructed[dateKey].losses += 1;
+        }
+    }
+
+    for (const [dateKey, record] of Object.entries(reconstructed)) {
+        const existing =
+            dailyRecords[dateKey] &&
+            typeof dailyRecords[dateKey] === "object"
+                ? dailyRecords[dateKey]
+                : null;
+
+        if (!existing) {
+            dailyRecords[dateKey] = record;
+            continue;
+        }
+
+        dailyRecords[dateKey] = {
+            wins: Math.max(
+                Number(existing.wins) || 0,
+                record.wins
+            ),
+            losses: Math.max(
+                Number(existing.losses) || 0,
+                record.losses
+            ),
+            total: Math.max(
+                Number(existing.total) || 0,
+                record.total
+            ),
+            closed: Math.max(
+                Number(existing.closed) || 0,
+                record.closed
+            )
+        };
+    }
+}
+
+function persistJsonFile(
+    filePath,
+    value
+) {
+    const tempPath =
+        `${filePath}.tmp`;
+
+    fs.writeFileSync(
+        tempPath,
+        JSON.stringify(
+            value,
+            null,
+            2
+        ),
+        "utf8"
+    );
+
+    fs.renameSync(
+        tempPath,
+        filePath
+    );
+}
+
 function loadPersistentRecords() {
     ensureDataDirectory();
 
@@ -360,6 +461,8 @@ function loadPersistentRecords() {
         );
     }
 
+    rebuildDailyRecordsFromHistory();
+
     while (
         completedRounds.length >
         CONFIG.forecastHistoryLimit
@@ -372,22 +475,14 @@ function savePersistentRecords() {
     try {
         ensureDataDirectory();
 
-        fs.writeFileSync(
+        persistJsonFile(
             ROUND_HISTORY_FILE,
-            JSON.stringify(
-                completedRounds,
-                null,
-                2
-            )
+            completedRounds
         );
 
-        fs.writeFileSync(
+        persistJsonFile(
             DAILY_RECORD_FILE,
-            JSON.stringify(
-                dailyRecords,
-                null,
-                2
-            )
+            dailyRecords
         );
     } catch (error) {
         console.error(
@@ -1163,7 +1258,10 @@ async function getBTCBook() {
             }
         );
 
-    return result;
+    return (
+        result?.data?.[0] ||
+        null
+    );
 }
 
 async function getBTCTrades() {
@@ -3438,11 +3536,18 @@ function calculateForecast() {
 
     /*
      * Odin only makes the SIT OUT decision after the complete
-     * collection period. Missing or unreliable information is
-     * treated as a reason to abstain rather than forcing YES/NO.
+     * collection period. The authoritative DCM index and strike
+     * remain hard requirements because they define the settlement
+     * reference. Individual diagnostics are optional inputs; one
+     * missing diagnostic feed should not force a SIT OUT by itself.
      */
     if (
         state.btcIndexPrice ===
+            null ||
+        state.btcIndexStale ||
+        state.btcIndexSource !==
+            "DCM_INDEX" ||
+        state.strikePrice ===
             null
     ) {
         state.phase =
@@ -3452,280 +3557,22 @@ function calculateForecast() {
             "SIT OUT";
 
         state.forecastProbability =
-            null;
+            50;
 
         state.forecastConfidence =
-            null;
+            0;
 
         state.forecastReason =
-            "SIT OUT: authoritative BTC index data is unavailable after the full collection period.";
+            "SIT OUT: Odin does not have the authoritative current BTC index and verified strike needed to evaluate this round.";
 
         currentRound.forecast =
             "SIT OUT";
 
         currentRound.forecastProbability =
-            null;
+            50;
 
         currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.btcIndexStale
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: the BTC index is stale, so Odin cannot rely on the current settlement reference.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.btcIndexSource !==
-        "DCM_INDEX"
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: Odin does not have the authoritative DCM BTC index feed required for this forecast.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.strikePrice ===
-        null
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: the current contract does not have a verified strike price.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.dataQuality <
-        CONFIG.minimumDataQuality
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            `SIT OUT: data quality is ${state.dataQuality.toFixed(1)}%, below Odin's ${CONFIG.minimumDataQuality}% minimum.`;
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.volatility3m ===
-        null
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: Odin does not have enough verified 3-minute volatility data.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.orderBookImbalance ===
-        null
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: order-book data is unavailable, so Odin cannot complete its full evidence check.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    if (
-        state.tradeFlow ===
-        null
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
-        state.forecastReason =
-            "SIT OUT: trade-flow data is unavailable, so Odin cannot complete its full evidence check.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            null;
-
-        currentRound.confidence =
-            null;
+            0;
 
         currentRound.forecastReason =
             state.forecastReason;
@@ -3740,11 +3587,14 @@ function calculateForecast() {
         "FORECASTING";
 
     let score = 0;
+    let signalCount = 0;
 
     if (
         state.strikeDistancePct !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.strikeDistancePct *
                 4,
@@ -3757,6 +3607,8 @@ function calculateForecast() {
         state.momentum1m !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.momentum1m *
                 8,
@@ -3769,6 +3621,8 @@ function calculateForecast() {
         state.momentum3m !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.momentum3m *
                 4,
@@ -3781,6 +3635,8 @@ function calculateForecast() {
         state.momentum5m !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.momentum5m *
                 2,
@@ -3793,6 +3649,8 @@ function calculateForecast() {
         state.orderBookImbalance !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.orderBookImbalance *
                 20,
@@ -3805,6 +3663,8 @@ function calculateForecast() {
         state.tradeFlow !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.tradeFlow *
                 20,
@@ -3817,6 +3677,8 @@ function calculateForecast() {
         state.acceleration !==
         null
     ) {
+        signalCount += 1;
+
         score += clamp(
             state.acceleration *
                 2,
@@ -3829,6 +3691,8 @@ function calculateForecast() {
         state.vwap !== null &&
         state.btcPrice !== null
     ) {
+        signalCount += 1;
+
         const vwapBias =
             (
                 (
@@ -3867,13 +3731,17 @@ function calculateForecast() {
         );
 
     /*
-     * SIT OUT is only allowed after the complete 3-minute
-     * collection window and when Odin's existing confidence
-     * threshold is not met. It does not create a forced YES/NO.
+     * SIT OUT only when the completed collection window still
+     * does not contain enough independent evidence, or when the
+     * resulting model confidence remains below Odin's existing
+     * threshold. Missing one individual diagnostic is not enough
+     * by itself to force a skip.
      */
     if (
+        signalCount <
+            CONFIG.minimumForecastSignals ||
         state.forecastConfidence <
-        CONFIG.minimumForecastConfidence
+            CONFIG.minimumForecastConfidence
     ) {
         state.forecast =
             "SIT OUT";
@@ -3885,7 +3753,10 @@ function calculateForecast() {
             "SIT_OUT";
 
         state.forecastReason =
-            "SIT OUT: no clear directional edge after the full 3-minute data collection.";
+            signalCount <
+            CONFIG.minimumForecastSignals
+                ? `SIT OUT: only ${signalCount} usable directional signals were available after the full 3-minute collection.`
+                : "SIT OUT: no clear directional edge after the full 3-minute data collection.";
 
         currentRound.forecast =
             "SIT OUT";
