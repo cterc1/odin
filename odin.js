@@ -1018,16 +1018,255 @@ function subscribeDCMMarketChannel(
 
 function connectDCMMarketSocket() {
     /*
-     * DCM market-data websocket is intentionally disabled.
-     * Odin uses the documented REST BTC index fallback for
-     * paper forecasting, avoiding repeated websocket handshake
-     * failures on the hosted runtime.
+     * The DCM market websocket currently rejects this deployment's
+     * handshake. Odin is paper-only, so use the documented REST BTC
+     * index fallback instead of repeatedly reconnecting to a failed
+     * websocket.
      */
     dcmMarketSocket =
         null;
 
     dcmSubscribedContractSymbol =
         null;
+}
+
+
+async function getBTCIndex() {
+    /*
+     * Strike Options use the CDNA-funded BTC index.
+     * The DCM market-data websocket exposes the index channel
+     * for the exact underlying used by the Strike instrument.
+     *
+     * Prefer that live feed. The REST Exchange index remains only
+     * a fallback so Odin can continue displaying diagnostics if the
+     * DCM websocket is temporarily unavailable.
+     */
+
+    if (
+        dcmIndexCache &&
+        safeNumber(
+            dcmIndexCache.price
+        ) !== null &&
+        safeNumber(
+            dcmIndexCache.timestamp
+        ) !== null &&
+        now() -
+            dcmIndexCache.timestamp <=
+            5000
+    ) {
+        return {
+            price:
+                safeNumber(
+                    dcmIndexCache.price
+                ),
+
+            timestamp:
+                safeNumber(
+                    dcmIndexCache.timestamp
+                ),
+
+            source:
+                "DCM_INDEX"
+        };
+    }
+
+    try {
+        const result =
+            await cryptoRequest(
+                "public/get-valuations",
+                {
+                    instrument_name:
+                        CONFIG.fallbackUnderlyingIndex,
+
+                    valuation_type:
+                        "index_price",
+
+                    count: 1
+                }
+            );
+
+        const item =
+            result?.data?.[0];
+
+        if (!item) {
+            return null;
+        }
+
+        return {
+            price:
+                safeNumber(
+                    item.v
+                ),
+
+            timestamp:
+                safeNumber(
+                    item.t
+                ),
+
+            source:
+                "EXCHANGE_INDEX_FALLBACK"
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
+async function getBTCPerpTicker() {
+    const result =
+        await cryptoRequest(
+            "public/get-tickers",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp
+            }
+        );
+
+    const ticker =
+        result?.data?.[0];
+
+    if (!ticker) {
+        return null;
+    }
+
+    return {
+        last:
+            safeNumber(
+                ticker.a
+            ),
+
+        bid:
+            safeNumber(
+                ticker.b
+            ),
+
+        ask:
+            safeNumber(
+                ticker.k
+            ),
+
+        bidSize:
+            safeNumber(
+                ticker.bs
+            ),
+
+        askSize:
+            safeNumber(
+                ticker.ks
+            ),
+
+        volume:
+            safeNumber(
+                ticker.v
+            ),
+
+        timestamp:
+            safeNumber(
+                ticker.t
+            )
+    };
+}
+
+async function getBTCBook() {
+    const result =
+        await cryptoRequest(
+            "public/get-book",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp,
+
+                depth: 25
+            }
+        );
+
+    return (
+        result?.data?.[0] ||
+        null
+    );
+}
+
+async function getBTCTrades() {
+    const result =
+        await cryptoRequest(
+            "public/get-trades",
+            {
+                instrument_name:
+                    CONFIG.underlyingPerp,
+
+                count: 50
+            }
+        );
+
+    return (
+        result?.data ||
+        []
+    );
+}
+
+async function getInstruments() {
+    let allInstruments = [];
+    let cursor = null;
+
+    for (
+        let page = 0;
+        page < 1000;
+        page++
+    ) {
+        const params = {
+            inst_type:
+                "BINARY_OPTION",
+
+            limit: 1000,
+
+            since: 0
+        };
+
+        if (cursor) {
+            params.cursor =
+                cursor;
+        }
+
+        const result =
+            await cryptoRequest(
+                "public/get-instruments",
+                params,
+                CRYPTO_DCM_API
+            );
+
+        const pageData =
+            Array.isArray(
+                result?.data
+            )
+                ? result.data
+                : [];
+
+        allInstruments =
+            allInstruments.concat(
+                pageData
+            );
+
+        console.log(
+            `[ODIN] Instrument page ${page + 1}: ${pageData.length} instruments | Total: ${allInstruments.length}`
+        );
+
+        const nextCursor =
+            result?.next_cursor;
+
+        if (
+            !nextCursor ||
+            !pageData.length
+        ) {
+            console.log(
+                `[ODIN] Finished instrument pagination at ${allInstruments.length} instruments`
+            );
+
+            break;
+        }
+
+        cursor =
+            nextCursor;
+    }
+
+    return allInstruments;
 }
 
 function getInstrumentAttributes(
@@ -1784,6 +2023,9 @@ function selectCurrentContract(
                     isFifteenMinuteStrikeInstrument(
                         instrument
                     ) &&
+                    isAboveStrikeContract(
+                        instrument
+                    ) &&
                     safeNumber(
                         instrument.expiry_timestamp_ms
                     ) !== null &&
@@ -1823,10 +2065,12 @@ function selectCurrentContract(
     }
 
     /*
-     * A BTC Strike Options market is a 15-minute market.
-     * Always select the nearest upcoming expiry first so Odin
-     * cannot jump to a later 15-minute market just because its
-     * strike happens to be closer to the current BTC price.
+     * A 15-minute Strike market is one expiry window.
+     * Always select the nearest upcoming expiry first.
+     * Only after that do we choose the strike closest to BTC.
+     *
+     * This prevents Odin from selecting a later 15-minute market
+     * simply because that later market has a closer strike.
      */
     const earliestExpiry =
         Math.min(
@@ -1836,7 +2080,7 @@ function selectCurrentContract(
             )
         );
 
-    const currentExpiryContracts =
+    const currentMarket =
         valid.filter(
             item =>
                 item.expiry ===
@@ -1850,7 +2094,7 @@ function selectCurrentContract(
             : state.btcPrice;
 
     const withStrikes =
-        currentExpiryContracts.filter(
+        currentMarket.filter(
             item =>
                 item.strike !==
                 null
@@ -1895,26 +2139,22 @@ function selectCurrentContract(
         )[0];
     }
 
-    return currentExpiryContracts.sort(
+    return currentMarket.sort(
         (
             a,
             b
-        ) => {
-            const aIndex =
+        ) =>
+            (
                 a.strikeIndex ??
-                Number.MAX_SAFE_INTEGER;
-
-            const bIndex =
+                Number.MAX_SAFE_INTEGER
+            ) -
+            (
                 b.strikeIndex ??
-                Number.MAX_SAFE_INTEGER;
-
-            return (
-                aIndex -
-                bIndex
-            );
-        }
+                Number.MAX_SAFE_INTEGER
+            )
     )[0];
 }
+
 
 async function refreshInstruments() {
     if (
