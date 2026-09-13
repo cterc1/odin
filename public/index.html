@@ -173,6 +173,62 @@
             margin-top: 4px;
         }
 
+        .collection-timer {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border: 1px solid #262d3d;
+            border-radius: 11px;
+            background: #0b0e14;
+        }
+
+        .collection-timer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .collection-timer-label {
+            color: #7f8798;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+        }
+
+        .collection-timer-value {
+            color: #7f8cff;
+            font-size: 22px;
+            line-height: 1;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .collection-timer.ready .collection-timer-value {
+            color: #45d39b;
+        }
+
+        .collection-timer.waiting .collection-timer-value {
+            color: #f2c96b;
+        }
+
+        .collection-timer-bar {
+            height: 5px;
+            width: 100%;
+            margin-top: 9px;
+            border-radius: 99px;
+            background: #202531;
+            overflow: hidden;
+        }
+
+        .collection-timer-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 99px;
+            background: #7f8cff;
+            transition: width 0.25s linear;
+        }
+
         .why {
             margin-top: 18px;
         }
@@ -238,24 +294,55 @@
             background: #10131a;
         }
 
-        .tradingview-widget-container {
+        #btcChart {
             width: 100%;
-            height: 100% !important;
-            min-height: 100%;
-        }
-
-        .tradingview-widget-container__widget {
-            width: 100%;
-            height: 100% !important;
-            min-height: 100%;
-        }
-
-        .tradingview-widget-container__widget iframe {
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 100%;
+            height: 100%;
             display: block;
-            border: 0;
+        }
+
+        .chart-overlay {
+            position: absolute;
+            left: 14px;
+            top: 12px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+
+        .chart-price {
+            padding: 7px 9px;
+            border: 1px solid #252b39;
+            border-radius: 8px;
+            background: rgba(8, 10, 15, 0.82);
+            color: #e8ebf0;
+            font-size: 12px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chart-source {
+            padding: 7px 9px;
+            border: 1px solid #252b39;
+            border-radius: 8px;
+            background: rgba(8, 10, 15, 0.82);
+            color: #687184;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+
+        .chart-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #687184;
+            font-size: 13px;
+            pointer-events: none;
         }
 
         .bottom-grid {
@@ -520,6 +607,47 @@
 
                     </div>
 
+                    <div
+                        class="collection-timer waiting"
+                        id="collectionTimer"
+                    >
+                        <div class="collection-timer-row">
+
+                            <div>
+
+                                <div class="collection-timer-label">
+                                    Data collection
+                                </div>
+
+                                <div
+                                    class="round-info"
+                                    id="collectionStatusText"
+                                >
+                                    Waiting for a 15-minute contract...
+                                </div>
+
+                            </div>
+
+                            <div
+                                class="collection-timer-value"
+                                id="collectionTimerValue"
+                            >
+                                --:--
+                            </div>
+
+                        </div>
+
+                        <div class="collection-timer-bar">
+
+                            <div
+                                class="collection-timer-fill"
+                                id="collectionTimerFill"
+                            ></div>
+
+                        </div>
+
+                    </div>
+
                     <div class="why">
 
                         <div class="why-title">
@@ -527,6 +655,7 @@
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Distance from strike
                             </span>
@@ -537,9 +666,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 1m momentum
                             </span>
@@ -550,9 +681,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 3m momentum
                             </span>
@@ -563,9 +696,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 5m momentum
                             </span>
@@ -576,9 +711,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Order flow
                             </span>
@@ -589,9 +726,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Order book pressure
                             </span>
@@ -602,9 +741,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 VWAP
                             </span>
@@ -615,9 +756,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Volatility
                             </span>
@@ -628,9 +771,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Data quality
                             </span>
@@ -641,9 +786,11 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
+
                             <span class="reason-label">
                                 Model probability
                             </span>
@@ -654,6 +801,7 @@
                             >
                                 --
                             </span>
+
                         </div>
 
                         <div class="reason">
@@ -675,10 +823,12 @@
                             class="market-bar"
                             id="marketBar"
                         >
+
                             <div
                                 class="market-fill"
                                 id="marketFill"
                             ></div>
+
                         </div>
 
                     </div>
@@ -697,17 +847,49 @@
                         Live BTC Chart
                     </div>
 
+                    <div
+                        id="chartStatus"
+                        style="
+                            color:#626c7f;
+                            font-size:11px;
+                        "
+                    >
+                        Waiting for data
+                    </div>
+
                 </div>
 
                 <div class="chart-wrap">
 
+                    <canvas
+                        id="btcChart"
+                    ></canvas>
+
                     <div
-                        class="tradingview-widget-container"
-                        id="tradingviewChart"
+                        class="chart-overlay"
                     >
+
                         <div
-                            class="tradingview-widget-container__widget"
-                        ></div>
+                            class="chart-price"
+                            id="chartPrice"
+                        >
+                            BTC --
+                        </div>
+
+                        <div
+                            class="chart-source"
+                            id="chartSource"
+                        >
+                            DCM INDEX
+                        </div>
+
+                    </div>
+
+                    <div
+                        class="chart-empty"
+                        id="chartEmpty"
+                    >
+                        Waiting for BTC index data...
                     </div>
 
                 </div>
@@ -1018,21 +1200,46 @@
 
     <script>
         const state = {
-            latest: null
+            latest: null,
+
+            serverOffsetMs: 0,
+
+            collectionRemainingMs:
+                null,
+
+            collectionTotalMs:
+                0,
+
+            collectionTargetServerMs:
+                null,
+
+            lastPrice:
+                null,
+
+            chartPoints:
+                []
         };
 
         const elements = {
             statusText:
-                document.getElementById("statusText"),
+                document.getElementById(
+                    "statusText"
+                ),
 
             statusDot:
-                document.getElementById("statusDot"),
+                document.getElementById(
+                    "statusDot"
+                ),
 
             phaseText:
-                document.getElementById("phaseText"),
+                document.getElementById(
+                    "phaseText"
+                ),
 
             predictionCall:
-                document.getElementById("predictionCall"),
+                document.getElementById(
+                    "predictionCall"
+                ),
 
             predictionProbability:
                 document.getElementById(
@@ -1045,7 +1252,29 @@
                 ),
 
             roundId:
-                document.getElementById("roundId"),
+                document.getElementById(
+                    "roundId"
+                ),
+
+            collectionTimer:
+                document.getElementById(
+                    "collectionTimer"
+                ),
+
+            collectionTimerValue:
+                document.getElementById(
+                    "collectionTimerValue"
+                ),
+
+            collectionTimerFill:
+                document.getElementById(
+                    "collectionTimerFill"
+                ),
+
+            collectionStatusText:
+                document.getElementById(
+                    "collectionStatusText"
+                ),
 
             distanceValue:
                 document.getElementById(
@@ -1053,22 +1282,34 @@
                 ),
 
             momentum1m:
-                document.getElementById("momentum1m"),
+                document.getElementById(
+                    "momentum1m"
+                ),
 
             momentum3m:
-                document.getElementById("momentum3m"),
+                document.getElementById(
+                    "momentum3m"
+                ),
 
             momentum5m:
-                document.getElementById("momentum5m"),
+                document.getElementById(
+                    "momentum5m"
+                ),
 
             tradeFlow:
-                document.getElementById("tradeFlow"),
+                document.getElementById(
+                    "tradeFlow"
+                ),
 
             obi:
-                document.getElementById("obi"),
+                document.getElementById(
+                    "obi"
+                ),
 
             vwap:
-                document.getElementById("vwap"),
+                document.getElementById(
+                    "vwap"
+                ),
 
             volatility:
                 document.getElementById(
@@ -1118,6 +1359,31 @@
             expiry:
                 document.getElementById(
                     "expiry"
+                ),
+
+            chart:
+                document.getElementById(
+                    "btcChart"
+                ),
+
+            chartStatus:
+                document.getElementById(
+                    "chartStatus"
+                ),
+
+            chartPrice:
+                document.getElementById(
+                    "chartPrice"
+                ),
+
+            chartSource:
+                document.getElementById(
+                    "chartSource"
+                ),
+
+            chartEmpty:
+                document.getElementById(
+                    "chartEmpty"
                 ),
 
             todayRecord:
@@ -1327,6 +1593,269 @@
                     : "Waiting for contract...";
         }
 
+        function updateCollectionTimer(
+            data
+        ) {
+            const remainingSeconds =
+                Number(
+                    data.collectionRemaining
+                );
+
+            const elapsedSeconds =
+                Number(
+                    data.collectionElapsed
+                );
+
+            const configuredTotal =
+                Number(
+                    data.collectionTotalSeconds
+                );
+
+            if (
+                Number.isFinite(
+                    configuredTotal
+                ) &&
+                configuredTotal > 0
+            ) {
+                state.collectionTotalMs =
+                    configuredTotal *
+                    1000;
+            } else if (
+                Number.isFinite(
+                    elapsedSeconds
+                ) &&
+                Number.isFinite(
+                    remainingSeconds
+                )
+            ) {
+                state.collectionTotalMs =
+                    Math.max(
+                        state.collectionTotalMs,
+                        (
+                            elapsedSeconds +
+                            remainingSeconds
+                        ) *
+                            1000
+                    );
+            }
+
+            if (
+                Number.isFinite(
+                    remainingSeconds
+                ) &&
+                remainingSeconds > 0 &&
+                String(
+                    data.phase ||
+                    ""
+                ).toUpperCase() ===
+                    "COLLECTING"
+            ) {
+                state.collectionRemainingMs =
+                    remainingSeconds *
+                    1000;
+
+                state.serverOffsetMs =
+                    Number.isFinite(
+                        Number(
+                            data.serverTime
+                        )
+                    )
+                        ? Number(
+                              data.serverTime
+                          ) - Date.now()
+                        : state.serverOffsetMs;
+
+                state.collectionTargetServerMs =
+                    Number(
+                        data.serverTime
+                    ) +
+                    remainingSeconds *
+                        1000;
+
+                elements.collectionTimer.className =
+                    "collection-timer";
+
+                elements.collectionStatusText.textContent =
+                    "Odin is collecting data before forecasting.";
+            } else {
+                state.collectionRemainingMs =
+                    null;
+
+                state.collectionTargetServerMs =
+                    null;
+
+                const phase =
+                    String(
+                        data.phase ||
+                        "WAITING"
+                    ).toUpperCase();
+
+                elements.collectionTimer.className =
+                    phase === "WAITING"
+                        ? "collection-timer waiting"
+                        : "collection-timer ready";
+
+                if (
+                    phase === "LOCKED" ||
+                    data.forecastMade
+                ) {
+                    elements.collectionStatusText.textContent =
+                        "Data collection complete. Forecast locked.";
+                } else if (
+                    phase === "WAITING"
+                ) {
+                    elements.collectionStatusText.textContent =
+                        "Waiting for a 15-minute contract...";
+                } else {
+                    elements.collectionStatusText.textContent =
+                        "Preparing data...";
+                }
+            }
+
+            renderCollectionTimer();
+        }
+
+        function formatTimer(
+            milliseconds
+        ) {
+            if (
+                !Number.isFinite(
+                    milliseconds
+                ) ||
+                milliseconds < 0
+            ) {
+                return "--:--";
+            }
+
+            const totalSeconds =
+                Math.ceil(
+                    milliseconds / 1000
+                );
+
+            const minutes =
+                Math.floor(
+                    totalSeconds / 60
+                );
+
+            const seconds =
+                totalSeconds % 60;
+
+            return (
+                `${String(
+                    minutes
+                ).padStart(
+                    2,
+                    "0"
+                )}:` +
+                `${String(
+                    seconds
+                ).padStart(
+                    2,
+                    "0"
+                )}`
+            );
+        }
+
+        function renderCollectionTimer() {
+            if (
+                state.collectionRemainingMs ===
+                    null
+            ) {
+                elements.collectionTimerValue.textContent =
+                    elements.collectionTimer.classList.contains(
+                        "ready"
+                    )
+                        ? "READY"
+                        : "--:--";
+
+                elements.collectionTimerFill.style.width =
+                    elements.collectionTimer.classList.contains(
+                        "ready"
+                    )
+                        ? "100%"
+                        : "0%";
+
+                return;
+            }
+
+            const nowAdjusted =
+                Date.now() +
+                state.serverOffsetMs;
+
+            const target =
+                state.collectionTargetServerMs;
+
+            let remaining =
+                state.collectionRemainingMs;
+
+            if (
+                Number.isFinite(
+                    target
+                )
+            ) {
+                remaining =
+                    Math.max(
+                        0,
+                        target -
+                            nowAdjusted
+                    );
+            }
+
+            state.collectionRemainingMs =
+                remaining;
+
+            elements.collectionTimerValue.textContent =
+                formatTimer(
+                    remaining
+                );
+
+            const total =
+                state.collectionTotalMs > 0
+                    ? state.collectionTotalMs
+                    : 1;
+
+            const progress =
+                Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        (
+                            (
+                                total -
+                                remaining
+                            ) /
+                            total
+                        ) *
+                            100
+                    )
+                );
+
+            elements.collectionTimerFill.style.width =
+                `${progress}%`;
+
+            if (
+                remaining <= 0
+            ) {
+                state.collectionRemainingMs =
+                    null;
+
+                state.collectionTargetServerMs =
+                    null;
+
+                elements.collectionTimer.className =
+                    "collection-timer ready";
+
+                elements.collectionTimerValue.textContent =
+                    "READY";
+
+                elements.collectionTimerFill.style.width =
+                    "100%";
+
+                elements.collectionStatusText.textContent =
+                    "Collection complete. Odin can evaluate the forecast.";
+            }
+        }
+
         function updateReasons(
             data
         ) {
@@ -1416,7 +1945,7 @@
                     )
                 )
             ) {
-                elements.marketBar.style.width =
+                elements.marketFill.style.width =
                     `${Math.max(
                         0,
                         Math.min(
@@ -1426,6 +1955,9 @@
                             )
                         )
                     )}%`;
+            } else {
+                elements.marketFill.style.width =
+                    "0%";
             }
         }
 
@@ -1487,21 +2019,61 @@
                     performance.total || 0
                 );
 
+            const daily =
+                data.dailyRecord ||
+                data.dailyRecords?.[
+                    data.recordDate
+                ] ||
+                null;
+
+            const dailyWins =
+                Number(
+                    data.dailyWins ??
+                    daily?.wins ??
+                    0
+                );
+
+            const dailyLosses =
+                Number(
+                    data.dailyLosses ??
+                    daily?.losses ??
+                    0
+                );
+
+            const dailyTotal =
+                dailyWins +
+                dailyLosses;
+
+            const dailyAccuracy =
+                data.dailyAccuracy !== null &&
+                data.dailyAccuracy !== undefined
+                    ? Number(
+                          data.dailyAccuracy
+                      )
+                    : dailyTotal > 0
+                        ? (
+                              dailyWins /
+                              dailyTotal
+                          ) *
+                          100
+                        : null;
+
             elements.todayRecord.textContent =
-                `${wins} - ${losses}`;
+                `${dailyWins} - ${dailyLosses}`;
 
             elements.weeklyRecord.textContent =
                 `${wins} - ${losses}`;
 
             elements.todayRounds.textContent =
-                total;
+                dailyTotal;
 
             elements.weeklyRounds.textContent =
                 total;
 
             elements.todayPasses.textContent =
                 completedPasses(
-                    data.recentRounds
+                    data.recentRounds,
+                    data.recordDate
                 );
 
             elements.weeklyPasses.textContent =
@@ -1510,11 +2082,13 @@
                 );
 
             elements.todayAccuracy.textContent =
-                performance.accuracy !== null &&
-                performance.accuracy !== undefined
-                    ? `${Number(
-                          performance.accuracy
-                      ).toFixed(1)}%`
+                dailyAccuracy !== null &&
+                Number.isFinite(
+                    dailyAccuracy
+                )
+                    ? `${dailyAccuracy.toFixed(
+                          1
+                      )}%`
                     : "--%";
 
             elements.weeklyAccuracy.textContent =
@@ -1522,7 +2096,9 @@
                 performance.accuracy !== undefined
                     ? `${Number(
                           performance.accuracy
-                      ).toFixed(1)}%`
+                      ).toFixed(
+                          1
+                      )}%`
                     : "--%";
 
             const streak =
@@ -1538,19 +2114,34 @@
         }
 
         function completedPasses(
-            rounds
+            rounds,
+            recordDate = null
         ) {
-            if (!Array.isArray(rounds)) {
+            if (
+                !Array.isArray(
+                    rounds
+                )
+            ) {
                 return 0;
             }
 
             return rounds.filter(
-                round =>
-                    String(
+                round => {
+                    if (
+                        recordDate &&
+                        round.recordDate &&
+                        round.recordDate !==
+                            recordDate
+                    ) {
+                        return false;
+                    }
+
+                    return String(
                         round.forecast ||
                         ""
                     ).toUpperCase() ===
-                    "PASS"
+                        "PASS";
+                }
             ).length;
         }
 
@@ -1558,7 +2149,9 @@
             rounds
         ) {
             if (
-                !Array.isArray(rounds) ||
+                !Array.isArray(
+                    rounds
+                ) ||
                 rounds.length === 0
             ) {
                 return "--";
@@ -1573,7 +2166,9 @@
                             "LOSS"
                 );
 
-            if (!resolved.length) {
+            if (
+                !resolved.length
+            ) {
                 return "--";
             }
 
@@ -1598,71 +2193,436 @@
             return `${count} ${first}`;
         }
 
-        /*
-         * TradingView BTC/USD chart.
-         *
-         * TradingView provides the live chart,
-         * candles, price scale, volume, crosshair,
-         * timeframe controls, and normal chart controls.
-         */
-
-        function loadTradingViewChart() {
-            const container =
-                document.getElementById(
-                    "tradingviewChart"
+        function addChartPoint(
+            data
+        ) {
+            const price =
+                Number(
+                    data.btcIndexPrice
                 );
 
-            if (!container) {
+            if (
+                !Number.isFinite(
+                    price
+                ) ||
+                price <= 0
+            ) {
                 return;
             }
 
-            const widget =
-                container.querySelector(
-                    ".tradingview-widget-container__widget"
+            const timestamp =
+                Number(
+                    data.serverTime
                 );
 
-            if (!widget) {
+            state.lastPrice =
+                price;
+
+            state.chartPoints.push({
+                time:
+                    Number.isFinite(
+                        timestamp
+                    )
+                        ? timestamp
+                        : Date.now(),
+
+                price
+            });
+
+            const cutoff =
+                Date.now() -
+                30 *
+                    60 *
+                    1000;
+
+            while (
+                state.chartPoints.length >
+                    1 &&
+                state.chartPoints[0].time <
+                    cutoff
+            ) {
+                state.chartPoints.shift();
+            }
+
+            while (
+                state.chartPoints.length >
+                360
+            ) {
+                state.chartPoints.shift();
+            }
+
+            elements.chartPrice.textContent =
+                `BTC $${number(
+                    price,
+                    2
+                )}`;
+
+            elements.chartStatus.textContent =
+                "Live";
+
+            elements.chartEmpty.style.display =
+                "none";
+        }
+
+        function drawChart() {
+            const canvas =
+                elements.chart;
+
+            if (!canvas) {
                 return;
             }
 
-            widget.innerHTML = "";
+            const rect =
+                canvas.getBoundingClientRect();
 
-            const script =
-                document.createElement(
-                    "script"
+            const dpr =
+                window.devicePixelRatio ||
+                1;
+
+            const width =
+                Math.max(
+                    1,
+                    Math.floor(
+                        rect.width
+                    )
                 );
 
-            script.type =
-                "text/javascript";
+            const height =
+                Math.max(
+                    1,
+                    Math.floor(
+                        rect.height
+                    )
+                );
 
-            script.src =
-                "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+            const pixelWidth =
+                Math.floor(
+                    width *
+                        dpr
+                );
 
-            script.async = true;
+            const pixelHeight =
+                Math.floor(
+                    height *
+                        dpr
+                );
 
-            script.innerHTML =
-                JSON.stringify({
-                    autosize: true,
-                    symbol: "COINBASE:BTCUSD",
-                    interval: "1",
-                    timezone: "America/New_York",
-                    theme: "dark",
-                    style: "1",
-                    locale: "en",
-                    allow_symbol_change: false,
-                    hide_top_toolbar: false,
-                    hide_legend: false,
-                    hide_side_toolbar: false,
-                    withdateranges: true,
-                    save_image: false,
-                    calendar: false,
-                    support_host:
-                        "https://www.tradingview.com"
-                });
+            if (
+                canvas.width !==
+                    pixelWidth ||
+                canvas.height !==
+                    pixelHeight
+            ) {
+                canvas.width =
+                    pixelWidth;
 
-            widget.appendChild(
-                script
+                canvas.height =
+                    pixelHeight;
+            }
+
+            const ctx =
+                canvas.getContext(
+                    "2d"
+                );
+
+            if (!ctx) {
+                return;
+            }
+
+            ctx.setTransform(
+                dpr,
+                0,
+                0,
+                dpr,
+                0,
+                0
             );
+
+            ctx.clearRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            ctx.fillStyle =
+                "#10131a";
+
+            ctx.fillRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            const points =
+                state.chartPoints;
+
+            if (
+                points.length <
+                2
+            ) {
+                drawChartGrid(
+                    ctx,
+                    width,
+                    height
+                );
+
+                return;
+            }
+
+            const padding = {
+                left: 16,
+                right: 16,
+                top: 25,
+                bottom: 25
+            };
+
+            const plotWidth =
+                Math.max(
+                    1,
+                    width -
+                        padding.left -
+                        padding.right
+                );
+
+            const plotHeight =
+                Math.max(
+                    1,
+                    height -
+                        padding.top -
+                        padding.bottom
+                );
+
+            let min =
+                Math.min(
+                    ...points.map(
+                        point =>
+                            point.price
+                    )
+                );
+
+            let max =
+                Math.max(
+                    ...points.map(
+                        point =>
+                            point.price
+                    )
+                );
+
+            const range =
+                Math.max(
+                    max - min,
+                    Math.abs(
+                        max
+                    ) *
+                        0.0002,
+                    1
+                );
+
+            const pad =
+                range *
+                0.12;
+
+            min -=
+                pad;
+
+            max +=
+                pad;
+
+            drawChartGrid(
+                ctx,
+                width,
+                height
+            );
+
+            ctx.beginPath();
+
+            points.forEach(
+                (
+                    point,
+                    index
+                ) => {
+                    const x =
+                        padding.left +
+                        (
+                            index /
+                            Math.max(
+                                points.length -
+                                    1,
+                                1
+                            )
+                        ) *
+                            plotWidth;
+
+                    const y =
+                        padding.top +
+                        (
+                            1 -
+                            (
+                                point.price -
+                                min
+                            ) /
+                                (
+                                    max -
+                                    min
+                                )
+                        ) *
+                            plotHeight;
+
+                    if (
+                        index ===
+                        0
+                    ) {
+                        ctx.moveTo(
+                            x,
+                            y
+                        );
+                    } else {
+                        ctx.lineTo(
+                            x,
+                            y
+                        );
+                    }
+                }
+            );
+
+            ctx.strokeStyle =
+                "#7f8cff";
+
+            ctx.lineWidth =
+                2;
+
+            ctx.lineJoin =
+                "round";
+
+            ctx.lineCap =
+                "round";
+
+            ctx.stroke();
+
+            const last =
+                points[
+                    points.length -
+                        1
+                ];
+
+            const lastX =
+                padding.left +
+                plotWidth;
+
+            const lastY =
+                padding.top +
+                (
+                    1 -
+                    (
+                        last.price -
+                        min
+                    ) /
+                        (
+                            max -
+                            min
+                        )
+                ) *
+                    plotHeight;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                lastX,
+                lastY,
+                4,
+                0,
+                Math.PI *
+                    2
+            );
+
+            ctx.fillStyle =
+                "#45d39b";
+
+            ctx.fill();
+        }
+
+        function drawChartGrid(
+            ctx,
+            width,
+            height
+        ) {
+            const horizontalLines =
+                5;
+
+            ctx.strokeStyle =
+                "rgba(80, 91, 112, 0.18)";
+
+            ctx.lineWidth =
+                1;
+
+            for (
+                let i = 0;
+                i <=
+                    horizontalLines;
+                i++
+            ) {
+                const y =
+                    25 +
+                    (
+                        (
+                            height -
+                            50
+                        ) /
+                        horizontalLines
+                    ) *
+                        i;
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    0,
+                    y
+                );
+
+                ctx.lineTo(
+                    width,
+                    y
+                );
+
+                ctx.stroke();
+            }
+
+            const verticalLines =
+                6;
+
+            for (
+                let i = 0;
+                i <=
+                    verticalLines;
+                i++
+            ) {
+                const x =
+                    (
+                        width /
+                        verticalLines
+                    ) *
+                    i;
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    x,
+                    0
+                );
+
+                ctx.lineTo(
+                    x,
+                    height
+                );
+
+                ctx.stroke();
+            }
+        }
+
+        function resizeChart() {
+            drawChart();
         }
 
         function handleUpdate(
@@ -1675,7 +2635,25 @@
             state.latest =
                 data;
 
+            if (
+                Number.isFinite(
+                    Number(
+                        data.serverTime
+                    )
+                )
+            ) {
+                state.serverOffsetMs =
+                    Number(
+                        data.serverTime
+                    ) -
+                    Date.now();
+            }
+
             updatePrediction(
+                data
+            );
+
+            updateCollectionTimer(
                 data
             );
 
@@ -1690,6 +2668,12 @@
             updateRecords(
                 data
             );
+
+            addChartPoint(
+                data
+            );
+
+            drawChart();
         }
 
         function connectSocket() {
@@ -1709,7 +2693,27 @@
             }
 
             const socket =
-                io();
+                io({
+                    transports: [
+                        "websocket",
+                        "polling"
+                    ],
+
+                    reconnection:
+                        true,
+
+                    reconnectionAttempts:
+                        Infinity,
+
+                    reconnectionDelay:
+                        1000,
+
+                    reconnectionDelayMax:
+                        5000,
+
+                    timeout:
+                        10000
+                });
 
             socket.on(
                 "connect",
@@ -1757,7 +2761,11 @@
             try {
                 const response =
                     await fetch(
-                        "/api/status"
+                        "/api/status",
+                        {
+                            cache:
+                                "no-store"
+                        }
                     );
 
                 if (
@@ -1791,7 +2799,11 @@
             try {
                 const response =
                     await fetch(
-                        "/api/history"
+                        "/api/history",
+                        {
+                            cache:
+                                "no-store"
+                        }
                     );
 
                 if (
@@ -1820,6 +2832,16 @@
             }
         }
 
+        function animationLoop() {
+            renderCollectionTimer();
+
+            drawChart();
+
+            window.requestAnimationFrame(
+                animationLoop
+            );
+        }
+
         setConnection(
             false
         );
@@ -1830,7 +2852,14 @@
 
         loadHistory();
 
-        loadTradingViewChart();
+        window.addEventListener(
+            "resize",
+            resizeChart
+        );
+
+        window.requestAnimationFrame(
+            animationLoop
+        );
     </script>
 </body>
 </html>
