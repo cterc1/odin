@@ -1018,265 +1018,16 @@ function subscribeDCMMarketChannel(
 
 function connectDCMMarketSocket() {
     /*
-     * DCM market websocket is disabled because the public endpoint
-     * is rejecting the handshake in the deployed environment.
-     * Odin is paper-only and uses the documented REST BTC index
-     * fallback, so do not repeatedly reconnect and spam errors.
+     * DCM market-data websocket is intentionally disabled.
+     * Odin uses the documented REST BTC index fallback for
+     * paper forecasting, avoiding repeated websocket handshake
+     * failures on the hosted runtime.
      */
-    if (
-        dcmMarketSocketReconnectTimer
-    ) {
-        clearTimeout(
-            dcmMarketSocketReconnectTimer
-        );
-
-        dcmMarketSocketReconnectTimer =
-            null;
-    }
-
     dcmMarketSocket =
         null;
 
     dcmSubscribedContractSymbol =
         null;
-}
-
-async function getBTCIndex() {
-    /*
-     * Strike Options use the CDNA-funded BTC index.
-     * The DCM market-data websocket exposes the index channel
-     * for the exact underlying used by the Strike instrument.
-     *
-     * Prefer that live feed. The REST Exchange index remains only
-     * a fallback so Odin can continue displaying diagnostics if the
-     * DCM websocket is temporarily unavailable.
-     */
-
-    if (
-        dcmIndexCache &&
-        safeNumber(
-            dcmIndexCache.price
-        ) !== null &&
-        safeNumber(
-            dcmIndexCache.timestamp
-        ) !== null &&
-        now() -
-            dcmIndexCache.timestamp <=
-            5000
-    ) {
-        return {
-            price:
-                safeNumber(
-                    dcmIndexCache.price
-                ),
-
-            timestamp:
-                safeNumber(
-                    dcmIndexCache.timestamp
-                ),
-
-            source:
-                "DCM_INDEX"
-        };
-    }
-
-    try {
-        const result =
-            await cryptoRequest(
-                "public/get-valuations",
-                {
-                    instrument_name:
-                        CONFIG.fallbackUnderlyingIndex,
-
-                    valuation_type:
-                        "index_price",
-
-                    count: 1
-                }
-            );
-
-        const item =
-            result?.data?.[0];
-
-        if (!item) {
-            return null;
-        }
-
-        return {
-            price:
-                safeNumber(
-                    item.v
-                ),
-
-            timestamp:
-                safeNumber(
-                    item.t
-                ),
-
-            source:
-                "EXCHANGE_INDEX_FALLBACK"
-        };
-    } catch (error) {
-        return null;
-    }
-}
-
-async function getBTCPerpTicker() {
-    const result =
-        await cryptoRequest(
-            "public/get-tickers",
-            {
-                instrument_name:
-                    CONFIG.underlyingPerp
-            }
-        );
-
-    const ticker =
-        result?.data?.[0];
-
-    if (!ticker) {
-        return null;
-    }
-
-    return {
-        last:
-            safeNumber(
-                ticker.a
-            ),
-
-        bid:
-            safeNumber(
-                ticker.b
-            ),
-
-        ask:
-            safeNumber(
-                ticker.k
-            ),
-
-        bidSize:
-            safeNumber(
-                ticker.bs
-            ),
-
-        askSize:
-            safeNumber(
-                ticker.ks
-            ),
-
-        volume:
-            safeNumber(
-                ticker.v
-            ),
-
-        timestamp:
-            safeNumber(
-                ticker.t
-            )
-    };
-}
-
-async function getBTCBook() {
-    const result =
-        await cryptoRequest(
-            "public/get-book",
-            {
-                instrument_name:
-                    CONFIG.underlyingPerp,
-
-                depth: 25
-            }
-        );
-
-    return (
-        result?.data?.[0] ||
-        null
-    );
-}
-
-async function getBTCTrades() {
-    const result =
-        await cryptoRequest(
-            "public/get-trades",
-            {
-                instrument_name:
-                    CONFIG.underlyingPerp,
-
-                count: 50
-            }
-        );
-
-    return (
-        result?.data ||
-        []
-    );
-}
-
-async function getInstruments() {
-    let allInstruments = [];
-    let cursor = null;
-
-    for (
-        let page = 0;
-        page < 1000;
-        page++
-    ) {
-        const params = {
-            inst_type:
-                "BINARY_OPTION",
-
-            limit: 1000,
-
-            since: 0
-        };
-
-        if (cursor) {
-            params.cursor =
-                cursor;
-        }
-
-        const result =
-            await cryptoRequest(
-                "public/get-instruments",
-                params,
-                CRYPTO_DCM_API
-            );
-
-        const pageData =
-            Array.isArray(
-                result?.data
-            )
-                ? result.data
-                : [];
-
-        allInstruments =
-            allInstruments.concat(
-                pageData
-            );
-
-        console.log(
-            `[ODIN] Instrument page ${page + 1}: ${pageData.length} instruments | Total: ${allInstruments.length}`
-        );
-
-        const nextCursor =
-            result?.next_cursor;
-
-        if (
-            !nextCursor ||
-            !pageData.length
-        ) {
-            console.log(
-                `[ODIN] Finished instrument pagination at ${allInstruments.length} instruments`
-            );
-
-            break;
-        }
-
-        cursor =
-            nextCursor;
-    }
-
-    return allInstruments;
 }
 
 function getInstrumentAttributes(
@@ -2022,58 +1773,75 @@ function selectCurrentContract(
         now();
 
     const valid =
-        candidates.filter(
-            (
-                instrument
-            ) =>
-                instrument &&
-                instrument.tradable !==
-                    false &&
-                isFifteenMinuteStrikeInstrument(
+        candidates
+            .filter(
+                (
                     instrument
-                ) &&
-                isAboveStrikeContract(
-                    instrument
-                ) &&
-                safeNumber(
-                    instrument.expiry_timestamp_ms
-                ) !== null &&
-                safeNumber(
-                    instrument.expiry_timestamp_ms
-                ) >
-                    currentTime
-        )
-        .map(
-            (
-                instrument
-            ) => ({
-                instrument,
-
-                expiry:
+                ) =>
+                    instrument &&
+                    instrument.tradable !==
+                        false &&
+                    isFifteenMinuteStrikeInstrument(
+                        instrument
+                    ) &&
                     safeNumber(
                         instrument.expiry_timestamp_ms
-                    ),
+                    ) !== null &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) >
+                        currentTime
+            )
+            .map(
+                (
+                    instrument
+                ) => ({
+                    instrument,
+                    expiry:
+                        safeNumber(
+                            instrument.expiry_timestamp_ms
+                        ),
+                    strike:
+                        extractStrikePrice(
+                            instrument
+                        ),
+                    strikeIndex:
+                        getStrikeIndex(
+                            instrument
+                        ),
+                    operator:
+                        getStrikeOperator(
+                            instrument
+                        )
+                })
+            );
 
-                strike:
-                    extractStrikePrice(
-                        instrument
-                    ),
-
-                strikeIndex:
-                    getStrikeIndex(
-                        instrument
-                    ),
-
-                operator:
-                    getStrikeOperator(
-                        instrument
-                    )
-            })
-        );
-
-    if (!valid.length) {
+    if (
+        !valid.length
+    ) {
         return null;
     }
+
+    /*
+     * A BTC Strike Options market is a 15-minute market.
+     * Always select the nearest upcoming expiry first so Odin
+     * cannot jump to a later 15-minute market just because its
+     * strike happens to be closer to the current BTC price.
+     */
+    const earliestExpiry =
+        Math.min(
+            ...valid.map(
+                item =>
+                    item.expiry
+            )
+        );
+
+    const currentExpiryContracts =
+        valid.filter(
+            item =>
+                item.expiry ===
+                earliestExpiry
+        );
 
     const btcPrice =
         state.btcIndexPrice !==
@@ -2082,67 +1850,70 @@ function selectCurrentContract(
             : state.btcPrice;
 
     const withStrikes =
-        valid.filter(
-            (item) =>
+        currentExpiryContracts.filter(
+            item =>
                 item.strike !==
                 null
         );
-
-    let selected = null;
 
     if (
         btcPrice !== null &&
         withStrikes.length
     ) {
-        selected =
-            withStrikes.sort(
-                (
-                    a,
-                    b
-                ) => {
-                    const aDistance =
-                        Math.abs(
-                            a.strike -
-                                btcPrice
-                        );
+        return withStrikes.sort(
+            (
+                a,
+                b
+            ) => {
+                const aDistance =
+                    Math.abs(
+                        a.strike -
+                            btcPrice
+                    );
 
-                    const bDistance =
-                        Math.abs(
-                            b.strike -
-                                btcPrice
-                        );
+                const bDistance =
+                    Math.abs(
+                        b.strike -
+                            btcPrice
+                    );
 
-                    if (
-                        aDistance !==
-                        bDistance
-                    ) {
-                        return (
-                            aDistance -
-                            bDistance
-                        );
-                    }
-
+                if (
+                    aDistance !==
+                    bDistance
+                ) {
                     return (
-                        a.expiry -
-                        b.expiry
+                        aDistance -
+                        bDistance
                     );
                 }
-            )[0];
+
+                return (
+                    a.strikeIndex -
+                    b.strikeIndex
+                );
+            }
+        )[0];
     }
 
-    if (!selected) {
-        selected =
-            valid.sort(
-                (
-                    a,
-                    b
-                ) =>
-                    a.expiry -
-                    b.expiry
-            )[0];
-    }
+    return currentExpiryContracts.sort(
+        (
+            a,
+            b
+        ) => {
+            const aIndex =
+                a.strikeIndex ??
+                Number.MAX_SAFE_INTEGER;
 
-    return selected;
+            const bIndex =
+                b.strikeIndex ??
+                Number.MAX_SAFE_INTEGER;
+
+            return (
+                aIndex -
+                bIndex
+            );
+        }
+    )[0];
 }
 
 async function refreshInstruments() {
