@@ -105,6 +105,7 @@ let state = {
     forecast: "WAIT",
     forecastProbability: null,
     forecastConfidence: null,
+    forecastReason: null,
 
     modelScore: 0,
 
@@ -1265,7 +1266,7 @@ function getInstrumentAttributes(
 function getEventMetadata(
     instrument
 ) {
-    const metadata =
+    const metadata = 
         instrument?.event_details
             ?.metaData;
 
@@ -2262,7 +2263,7 @@ async function refreshInstruments() {
                 instruments.find(
                     (instrument) =>
                         instrument.symbol ===
-                        lockedSymbol &&
+                            lockedSymbol &&
                         safeNumber(
                             instrument.expiry_timestamp_ms
                         ) !== null &&
@@ -3062,8 +3063,7 @@ async function collectContractData() {
                 (
                     ticker.bid +
                     ticker.ask
-                ) /
-                2;
+                ) / 2;
 
             state.marketProbability =
                 clamp(
@@ -3319,6 +3319,9 @@ function startNewRound() {
         confidence:
             null,
 
+        forecastReason:
+            null,
+
         forecastMade:
             false,
 
@@ -3334,6 +3337,18 @@ function startNewRound() {
 
     state.phase =
         "COLLECTING";
+
+    state.forecast =
+        "WAIT";
+
+    state.forecastProbability =
+        null;
+
+    state.forecastConfidence =
+        null;
+
+    state.forecastReason =
+        null;
 
     console.log(
         `[ODIN] Started paper round ${id}`
@@ -3355,6 +3370,9 @@ function calculateForecast() {
 
         state.forecastConfidence =
             null;
+
+        state.forecastReason =
+            "No current 15-minute BTC Strike contract is available.";
 
         return;
     }
@@ -3380,8 +3398,15 @@ function calculateForecast() {
         state.forecastConfidence =
             currentRound.confidence;
 
+        state.forecastReason =
+            currentRound.forecastReason ||
+            null;
+
         state.phase =
-            "LOCKED";
+            currentRound.forecast ===
+                "SIT OUT"
+                ? "SIT_OUT"
+                : "LOCKED";
 
         return;
     }
@@ -3405,37 +3430,308 @@ function calculateForecast() {
         state.forecastConfidence =
             null;
 
+        state.forecastReason =
+            "Collecting the full 3-minute data window.";
+
         return;
     }
 
+    /*
+     * Odin only makes the SIT OUT decision after the complete
+     * collection period. Missing or unreliable information is
+     * treated as a reason to abstain rather than forcing YES/NO.
+     */
     if (
         state.btcIndexPrice ===
-            null ||
-        state.btcIndexStale ||
-        state.btcIndexSource !==
-            "DCM_INDEX" ||
-        state.strikePrice ===
-            null ||
-        state.dataQuality <
-            CONFIG.minimumDataQuality ||
-        state.volatility3m ===
-            null ||
-        state.orderBookImbalance ===
-            null ||
-        state.tradeFlow ===
             null
     ) {
         state.phase =
-            "WAITING";
+            "SIT_OUT";
 
         state.forecast =
-            "WAIT";
+            "SIT OUT";
 
         state.forecastProbability =
             null;
 
         state.forecastConfidence =
             null;
+
+        state.forecastReason =
+            "SIT OUT: authoritative BTC index data is unavailable after the full collection period.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.btcIndexStale
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: the BTC index is stale, so Odin cannot rely on the current settlement reference.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.btcIndexSource !==
+        "DCM_INDEX"
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: Odin does not have the authoritative DCM BTC index feed required for this forecast.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.strikePrice ===
+        null
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: the current contract does not have a verified strike price.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.dataQuality <
+        CONFIG.minimumDataQuality
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            `SIT OUT: data quality is ${state.dataQuality.toFixed(1)}%, below Odin's ${CONFIG.minimumDataQuality}% minimum.`;
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.volatility3m ===
+        null
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: Odin does not have enough verified 3-minute volatility data.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.orderBookImbalance ===
+        null
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: order-book data is unavailable, so Odin cannot complete its full evidence check.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
+
+        return;
+    }
+
+    if (
+        state.tradeFlow ===
+        null
+    ) {
+        state.phase =
+            "SIT_OUT";
+
+        state.forecast =
+            "SIT OUT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            "SIT OUT: trade-flow data is unavailable, so Odin cannot complete its full evidence check.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            null;
+
+        currentRound.confidence =
+            null;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
 
         return;
     }
@@ -3535,8 +3831,10 @@ function calculateForecast() {
     ) {
         const vwapBias =
             (
-                (state.btcPrice -
-                    state.vwap) /
+                (
+                    state.btcPrice -
+                    state.vwap
+                ) /
                 state.vwap
             ) *
             100;
@@ -3568,18 +3866,41 @@ function calculateForecast() {
                 50
         );
 
+    /*
+     * SIT OUT is only allowed after the complete 3-minute
+     * collection window and when Odin's existing confidence
+     * threshold is not met. It does not create a forced YES/NO.
+     */
     if (
         state.forecastConfidence <
         CONFIG.minimumForecastConfidence
     ) {
         state.forecast =
-            "WAIT";
+            "SIT OUT";
 
         state.forecastProbability =
             probability;
 
         state.phase =
-            "WAITING";
+            "SIT_OUT";
+
+        state.forecastReason =
+            "SIT OUT: no clear directional edge after the full 3-minute data collection.";
+
+        currentRound.forecast =
+            "SIT OUT";
+
+        currentRound.forecastProbability =
+            probability;
+
+        currentRound.confidence =
+            state.forecastConfidence;
+
+        currentRound.forecastReason =
+            state.forecastReason;
+
+        currentRound.forecastMade =
+            true;
 
         return;
     }
@@ -3590,6 +3911,9 @@ function calculateForecast() {
             ? "YES"
             : "NO";
 
+    state.forecastReason =
+        "Directional evidence cleared Odin's minimum confidence threshold after the full data collection.";
+
     currentRound.forecast =
         state.forecast;
 
@@ -3598,6 +3922,9 @@ function calculateForecast() {
 
     currentRound.confidence =
         state.forecastConfidence;
+
+    currentRound.forecastReason =
+        state.forecastReason;
 
     currentRound.forecastMade =
         true;
@@ -3629,7 +3956,7 @@ function resolveCurrentContract() {
             instruments.find(
                 (instrument) =>
                     instrument.symbol ===
-                    lockedSymbol &&
+                        lockedSymbol &&
                     safeNumber(
                         instrument.expiry_timestamp_ms
                     ) !== null &&
@@ -3806,6 +4133,90 @@ function evaluateExpiredRound() {
             ? state.btcIndexPrice
             : null;
 
+    /*
+     * SIT OUT is a deliberate abstention. It is recorded as PASS
+     * for round history and never becomes a WIN or LOSS.
+     */
+    if (
+        currentRound.forecast ===
+        "SIT OUT"
+    ) {
+        currentRound.finalPrice =
+            settlementPrice !== null
+                ? settlementPrice
+                : finalIndexPrice;
+
+        currentRound.result =
+            "PASS";
+
+        currentRound.resolvedAt =
+            now();
+
+        currentRound.officialRecordCounted =
+            false;
+
+        const alreadyResolved =
+            completedRounds.some(
+                (round) =>
+                    round.id ===
+                    currentRound.id
+            );
+
+        if (
+            alreadyResolved
+        ) {
+            console.log(
+                `[ODIN] SIT OUT round ${currentRound.id} was already resolved; duplicate result ignored.`
+            );
+
+            currentRound =
+                null;
+
+            return;
+        }
+
+        const completedRound = {
+            ...currentRound
+        };
+
+        completedRounds.push(
+            completedRound
+        );
+
+        while (
+            completedRounds.length >
+            CONFIG.forecastHistoryLimit
+        ) {
+            completedRounds.shift();
+        }
+
+        savePersistentRecords();
+
+        console.log(
+            `[ODIN] Round ${currentRound.id} resolved: PASS (SIT OUT)`
+        );
+
+        currentRound =
+            null;
+
+        state.forecast =
+            "WAIT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastReason =
+            null;
+
+        state.activeRoundId =
+            null;
+
+        return;
+    }
+
     const finalPrice =
         settlementPrice !== null
             ? settlementPrice
@@ -3913,6 +4324,9 @@ function evaluateExpiredRound() {
         null;
 
     state.forecastConfidence =
+        null;
+
+    state.forecastReason =
         null;
 
     state.activeRoundId =
