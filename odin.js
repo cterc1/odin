@@ -1407,7 +1407,7 @@ function isBTCStrikeInstrument(
     const text =
         getInstrumentText(
             instrument
-        ).toUpperCase();
+        );
 
     const symbol =
         String(
@@ -2080,7 +2080,7 @@ function selectCurrentContract(
     return selected;
 }
 
-function refreshInstruments() {
+async function refreshInstruments() {
     if (
         instrumentRefreshInProgress
     ) {
@@ -4028,31 +4028,31 @@ async function poll() {
         const currentTime =
             now();
 
-    if (
-        currentTime -
-            lastInstrumentRefresh >=
-        CONFIG.instrumentRefreshMs
-    ) {
-        lastInstrumentRefresh =
-            currentTime;
+        if (
+            currentTime -
+                lastInstrumentRefresh >=
+            CONFIG.instrumentRefreshMs
+        ) {
+            lastInstrumentRefresh =
+                currentTime;
 
-        await refreshInstruments();
-    }
+            await refreshInstruments();
+        }
 
-    await collectMarketData();
+        await collectMarketData();
 
-    resolveCurrentContract();
+        resolveCurrentContract();
 
-    await collectContractData();
+        await collectContractData();
 
-    calculateStateMetrics();
+        calculateStateMetrics();
 
-    calculateForecast();
+        calculateForecast();
 
-    evaluateExpiredRound();
+        evaluateExpiredRound();
 
-    state.serverTime =
-        now();
+        state.serverTime =
+            now();
 
         io.emit(
             "odin:update",
