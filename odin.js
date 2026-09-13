@@ -1017,209 +1017,28 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    const WebSocketCtor =
-        globalThis.WebSocket;
-
+    /*
+     * DCM market websocket is disabled because the public endpoint
+     * is rejecting the handshake in the deployed environment.
+     * Odin is paper-only and uses the documented REST BTC index
+     * fallback, so do not repeatedly reconnect and spam errors.
+     */
     if (
-        typeof WebSocketCtor !==
-        "function"
+        dcmMarketSocketReconnectTimer
     ) {
-        console.error(
-            "[ODIN] Native WebSocket is unavailable; DCM index feed cannot start."
+        clearTimeout(
+            dcmMarketSocketReconnectTimer
         );
 
-        return;
-    }
-
-    if (
-        dcmMarketSocket &&
-        (
-            dcmMarketSocket.readyState ===
-                0 ||
-            dcmMarketSocket.readyState ===
-                1
-        )
-    ) {
-        return;
-    }
-
-    try {
-        dcmMarketSocket =
-            new WebSocketCtor(
-                "wss://stream.crypto.com/dcm/v1/market"
-            );
-
-        dcmMarketSocket.onopen =
-            () => {
-                console.log(
-                    "[ODIN] DCM market-data websocket connected"
-                );
-
-                subscribeDCMMarketChannel(
-                    `index.${CONFIG.underlyingIndex}`
-                );
-
-                if (
-                    dcmSubscribedContractSymbol
-                ) {
-                    subscribeDCMMarketChannel(
-                        `settlement.${dcmSubscribedContractSymbol}`
-                    );
-                }
-            };
-
-        dcmMarketSocket.onmessage =
-            (event) => {
-                try {
-                    const message =
-                        JSON.parse(
-                            String(
-                                event.data
-                            )
-                        );
-
-                    const result =
-                        message?.result ||
-                        {};
-
-                    if (
-                        Number(message?.code) !== 0 &&
-                        message?.method ===
-                            "subscribe"
-                    ) {
-                        console.error(
-                            "[ODIN] DCM subscription rejected:",
-                            JSON.stringify(
-                                message
-                            )
-                        );
-                    }
-
-                    const channel =
-                        String(
-                            result.channel ||
-                                result.subscription ||
-                                ""
-                        );
-
-                    const data =
-                        Array.isArray(
-                            result.data
-                        )
-                            ? result.data
-                            : [];
-
-                    const item =
-                        data.length
-                            ? data[
-                                  data.length -
-                                      1
-                              ]
-                            : null;
-
-                    if (
-                        channel.startsWith(
-                            "index."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmIndexCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now()
-                            };
-                        }
-                    }
-
-                    if (
-                        channel.startsWith(
-                            "settlement."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmSettlementCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now(),
-
-                                symbol:
-                                    result.instrument_name ||
-                                    dcmSubscribedContractSymbol
-                            };
-                        }
-                    }
-                } catch (error) {
-                    console.error(
-                        "[ODIN] DCM market-data message error:",
-                        error.message
-                    );
-                }
-            };
-
-        dcmMarketSocket.onerror =
-            (error) => {
-                console.error(
-                    "[ODIN] DCM market-data websocket error:",
-                    error?.message ||
-                        error?.error ||
-                        "connection failed"
-                );
-            };
-
-        dcmMarketSocket.onclose =
-            () => {
-                console.log(
-                    "[ODIN] DCM market-data websocket disconnected"
-                );
-
-                dcmMarketSocket =
-                    null;
-
-                scheduleDCMMarketSocketReconnect();
-            };
-    } catch (error) {
-        dcmMarketSocket =
+        dcmMarketSocketReconnectTimer =
             null;
-
-        console.error(
-            "[ODIN] DCM market-data websocket connection error:",
-            error.message
-        );
-
-        scheduleDCMMarketSocketReconnect();
     }
+
+    dcmMarketSocket =
+        null;
+
+    dcmSubscribedContractSymbol =
+        null;
 }
 
 async function getBTCIndex() {
