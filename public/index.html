@@ -343,7 +343,6 @@
             justify-content: space-between;
             align-items: flex-start;
             pointer-events: none;
-            z-index: 5;
         }
 
         .chart-price {
@@ -378,7 +377,6 @@
             color: #687184;
             font-size: 13px;
             pointer-events: none;
-            z-index: 4;
         }
 
         .bottom-grid {
@@ -648,9 +646,7 @@
                         id="collectionTimer"
                     >
                         <div class="collection-timer-row">
-
                             <div>
-
                                 <div class="collection-timer-label">
                                     Data collection
                                 </div>
@@ -661,7 +657,6 @@
                                 >
                                     Waiting for a 15-minute contract...
                                 </div>
-
                             </div>
 
                             <div
@@ -670,18 +665,14 @@
                             >
                                 --:--
                             </div>
-
                         </div>
 
                         <div class="collection-timer-bar">
-
                             <div
                                 class="collection-timer-fill"
                                 id="collectionTimerFill"
                             ></div>
-
                         </div>
-
                     </div>
 
                     <div class="why">
@@ -691,7 +682,6 @@
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Distance from strike
                             </span>
@@ -702,11 +692,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 1m momentum
                             </span>
@@ -717,11 +705,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 3m momentum
                             </span>
@@ -732,11 +718,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 5m momentum
                             </span>
@@ -747,11 +731,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Order flow
                             </span>
@@ -762,11 +744,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Order book pressure
                             </span>
@@ -777,11 +757,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 VWAP
                             </span>
@@ -792,11 +770,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Volatility
                             </span>
@@ -807,11 +783,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Data quality
                             </span>
@@ -822,11 +796,9 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
-
                             <span class="reason-label">
                                 Model probability
                             </span>
@@ -837,7 +809,6 @@
                             >
                                 --
                             </span>
-
                         </div>
 
                         <div class="reason">
@@ -859,12 +830,10 @@
                             class="market-bar"
                             id="marketBar"
                         >
-
                             <div
                                 class="market-fill"
                                 id="marketFill"
                             ></div>
-
                         </div>
 
                     </div>
@@ -905,7 +874,6 @@
                     <div
                         class="chart-overlay"
                     >
-
                         <div
                             class="chart-price"
                             id="chartPrice"
@@ -919,7 +887,6 @@
                         >
                             DCM INDEX
                         </div>
-
                     </div>
 
                     <div
@@ -1237,45 +1204,27 @@
 
     <script>
         const state = {
-            latest:
-                null,
-
-            serverOffsetMs:
-                0,
-
-            collectionRemainingMs:
-                null,
-
-            collectionTotalMs:
-                0,
-
-            collectionTargetServerMs:
-                null,
-
-            tradingViewInitialized:
-                false
+            latest: null,
+            serverOffsetMs: 0,
+            collectionRemainingMs: null,
+            collectionTotalMs: 0,
+            lastPrice: null,
+            chartPoints: [],
+            tradingViewInitialized: false
         };
 
         const elements = {
             statusText:
-                document.getElementById(
-                    "statusText"
-                ),
+                document.getElementById("statusText"),
 
             statusDot:
-                document.getElementById(
-                    "statusDot"
-                ),
+                document.getElementById("statusDot"),
 
             phaseText:
-                document.getElementById(
-                    "phaseText"
-                ),
+                document.getElementById("phaseText"),
 
             predictionCall:
-                document.getElementById(
-                    "predictionCall"
-                ),
+                document.getElementById("predictionCall"),
 
             predictionProbability:
                 document.getElementById(
@@ -1288,14 +1237,10 @@
                 ),
 
             roundId:
-                document.getElementById(
-                    "roundId"
-                ),
+                document.getElementById("roundId"),
 
             collectionTimer:
-                document.getElementById(
-                    "collectionTimer"
-                ),
+                document.getElementById("collectionTimer"),
 
             collectionTimerValue:
                 document.getElementById(
@@ -1318,34 +1263,22 @@
                 ),
 
             momentum1m:
-                document.getElementById(
-                    "momentum1m"
-                ),
+                document.getElementById("momentum1m"),
 
             momentum3m:
-                document.getElementById(
-                    "momentum3m"
-                ),
+                document.getElementById("momentum3m"),
 
             momentum5m:
-                document.getElementById(
-                    "momentum5m"
-                ),
+                document.getElementById("momentum5m"),
 
             tradeFlow:
-                document.getElementById(
-                    "tradeFlow"
-                ),
+                document.getElementById("tradeFlow"),
 
             obi:
-                document.getElementById(
-                    "obi"
-                ),
+                document.getElementById("obi"),
 
             vwap:
-                document.getElementById(
-                    "vwap"
-                ),
+                document.getElementById("vwap"),
 
             volatility:
                 document.getElementById(
@@ -1403,24 +1336,16 @@
                 ),
 
             chartStatus:
-                document.getElementById(
-                    "chartStatus"
-                ),
+                document.getElementById("chartStatus"),
 
             chartPrice:
-                document.getElementById(
-                    "chartPrice"
-                ),
+                document.getElementById("chartPrice"),
 
             chartSource:
-                document.getElementById(
-                    "chartSource"
-                ),
+                document.getElementById("chartSource"),
 
             chartEmpty:
-                document.getElementById(
-                    "chartEmpty"
-                ),
+                document.getElementById("chartEmpty"),
 
             todayRecord:
                 document.getElementById(
@@ -1487,9 +1412,7 @@
                 return "--";
             }
 
-            return Number(
-                value
-            ).toLocaleString(
+            return Number(value).toLocaleString(
                 undefined,
                 {
                     minimumFractionDigits:
@@ -1514,11 +1437,7 @@
                 return "--";
             }
 
-            return `${Number(
-                value
-            ).toFixed(
-                1
-            )}%`;
+            return `${Number(value).toFixed(1)}%`;
         }
 
         function signedNumber(
@@ -1536,9 +1455,7 @@
             }
 
             const numberValue =
-                Number(
-                    value
-                );
+                Number(value);
 
             return (
                 `${numberValue >= 0 ? "+" : ""}` +
@@ -1557,9 +1474,7 @@
             }
 
             const date =
-                new Date(
-                    timestamp
-                );
+                new Date(timestamp);
 
             if (
                 Number.isNaN(
@@ -1572,14 +1487,9 @@
             return date.toLocaleTimeString(
                 [],
                 {
-                    hour:
-                        "numeric",
-
-                    minute:
-                        "2-digit",
-
-                    second:
-                        "2-digit"
+                    hour: "numeric",
+                    minute: "2-digit",
+                    second: "2-digit"
                 }
             );
         }
@@ -1623,10 +1533,7 @@
             const forecastClass =
                 forecast
                     .toLowerCase()
-                    .replace(
-                        /\s+/g,
-                        "-"
-                    );
+                    .replace(/\s+/g, "-");
 
             elements.predictionCall.className =
                 "prediction-call " +
@@ -1704,8 +1611,7 @@
                 ) &&
                 remainingSeconds > 0 &&
                 String(
-                    data.phase ||
-                    ""
+                    data.phase || ""
                 ).toUpperCase() ===
                     "COLLECTING"
             ) {
@@ -1721,16 +1627,8 @@
                     )
                         ? Number(
                               data.serverTime
-                          ) -
-                          Date.now()
+                          ) - Date.now()
                         : state.serverOffsetMs;
-
-                state.collectionTargetServerMs =
-                    Number(
-                        data.serverTime
-                    ) +
-                    remainingSeconds *
-                        1000;
 
                 elements.collectionTimer.className =
                     "collection-timer";
@@ -1741,9 +1639,6 @@
                 state.collectionRemainingMs =
                     null;
 
-                state.collectionTargetServerMs =
-                    null;
-
                 const phase =
                     String(
                         data.phase ||
@@ -1751,26 +1646,18 @@
                     ).toUpperCase();
 
                 elements.collectionTimer.className =
-                    phase ===
-                    "WAITING"
+                    phase === "WAITING"
                         ? "collection-timer waiting"
                         : "collection-timer ready";
 
                 if (
-                    phase ===
-                        "LOCKED" ||
-                    phase ===
-                        "SIT_OUT" ||
+                    phase === "LOCKED" ||
                     data.forecastMade
                 ) {
                     elements.collectionStatusText.textContent =
-                        phase ===
-                            "SIT_OUT"
-                            ? "Data collection complete. Odin is sitting out this round."
-                            : "Data collection complete. Forecast locked.";
+                        "Data collection complete. Forecast locked.";
                 } else if (
-                    phase ===
-                    "WAITING"
+                    phase === "WAITING"
                 ) {
                     elements.collectionStatusText.textContent =
                         "Waiting for a 15-minute contract...";
@@ -1797,40 +1684,27 @@
 
             const totalSeconds =
                 Math.ceil(
-                    milliseconds /
-                        1000
+                    milliseconds / 1000
                 );
 
             const minutes =
                 Math.floor(
-                    totalSeconds /
-                        60
+                    totalSeconds / 60
                 );
 
             const seconds =
-                totalSeconds %
-                60;
+                totalSeconds % 60;
 
             return (
-                `${String(
-                    minutes
-                ).padStart(
-                    2,
-                    "0"
-                )}:` +
-                `${String(
-                    seconds
-                ).padStart(
-                    2,
-                    "0"
-                )}`
+                `${String(minutes).padStart(2, "0")}:` +
+                `${String(seconds).padStart(2, "0")}`
             );
         }
 
         function renderCollectionTimer() {
             if (
                 state.collectionRemainingMs ===
-                null
+                    null
             ) {
                 elements.collectionTimerValue.textContent =
                     elements.collectionTimer.classList.contains(
@@ -1860,9 +1734,7 @@
                 state.collectionRemainingMs;
 
             if (
-                Number.isFinite(
-                    target
-                )
+                Number.isFinite(target)
             ) {
                 remaining =
                     Math.max(
@@ -1881,8 +1753,7 @@
                 );
 
             const total =
-                state.collectionTotalMs >
-                0
+                state.collectionTotalMs > 0
                     ? state.collectionTotalMs
                     : 1;
 
@@ -1892,11 +1763,9 @@
                     Math.min(
                         100,
                         (
-                            (
-                                total -
-                                remaining
-                            ) /
-                            total
+                            (total -
+                                remaining) /
+                                total
                         ) *
                             100
                     )
@@ -1909,9 +1778,6 @@
                 remaining <= 0
             ) {
                 state.collectionRemainingMs =
-                    null;
-
-                state.collectionTargetServerMs =
                     null;
 
                 elements.collectionTimer.className =
@@ -1932,10 +1798,8 @@
             data
         ) {
             elements.distanceValue.textContent =
-                data.strikeDistancePct !==
-                    null &&
-                data.strikeDistancePct !==
-                    undefined
+                data.strikeDistancePct !== null &&
+                data.strikeDistancePct !== undefined
                     ? signedNumber(
                           data.strikeDistance,
                           2
@@ -1977,10 +1841,8 @@
                 );
 
             elements.vwap.textContent =
-                data.vwap !==
-                    null &&
-                data.vwap !==
-                    undefined
+                data.vwap !== null &&
+                data.vwap !== undefined
                     ? `$${number(
                           data.vwap,
                           2
@@ -1994,10 +1856,8 @@
                 );
 
             elements.dataQuality.textContent =
-                data.dataQuality !==
-                    null &&
-                data.dataQuality !==
-                    undefined
+                data.dataQuality !== null &&
+                data.dataQuality !== undefined
                     ? `${number(
                           data.dataQuality,
                           0
@@ -2015,10 +1875,8 @@
                 );
 
             if (
-                data.marketProbability !==
-                    null &&
-                data.marketProbability !==
-                    undefined &&
+                data.marketProbability !== null &&
+                data.marketProbability !== undefined &&
                 Number.isFinite(
                     Number(
                         data.marketProbability
@@ -2045,18 +1903,14 @@
             data
         ) {
             elements.btcPrice.textContent =
-                data.btcIndexPrice !==
-                    null &&
-                data.btcIndexPrice !==
-                    undefined
+                data.btcIndexPrice !== null &&
+                data.btcIndexPrice !== undefined
                     ? `$${number(
                           data.btcIndexPrice,
                           2
                       )}`
-                    : data.btcPrice !==
-                          null &&
-                      data.btcPrice !==
-                          undefined
+                    : data.btcPrice !== null &&
+                      data.btcPrice !== undefined
                         ? `$${number(
                               data.btcPrice,
                               2
@@ -2064,10 +1918,8 @@
                         : "--";
 
             elements.strikePrice.textContent =
-                data.strikePrice !==
-                    null &&
-                data.strikePrice !==
-                    undefined
+                data.strikePrice !== null &&
+                data.strikePrice !== undefined
                     ? `$${number(
                           data.strikePrice,
                           2
@@ -2088,32 +1940,26 @@
             data
         ) {
             const performance =
-                data.performance ||
-                {};
+                data.performance || {};
 
             const wins =
                 Number(
-                    performance.wins ||
-                    0
+                    performance.wins || 0
                 );
 
             const losses =
                 Number(
-                    performance.losses ||
-                    0
+                    performance.losses || 0
                 );
 
             const total =
                 Number(
-                    performance.total ||
-                    0
+                    performance.total || 0
                 );
 
             const daily =
                 data.dailyRecord ||
-                data.dailyRecords?.[
-                    data.recordDate
-                ] ||
+                data.dailyRecords?.[data.recordDate] ||
                 null;
 
             const dailyWins =
@@ -2135,15 +1981,12 @@
                 dailyLosses;
 
             const dailyAccuracy =
-                data.dailyAccuracy !==
-                    null &&
-                data.dailyAccuracy !==
-                    undefined
+                data.dailyAccuracy !== null &&
+                data.dailyAccuracy !== undefined
                     ? Number(
                           data.dailyAccuracy
                       )
-                    : dailyTotal >
-                          0
+                    : dailyTotal > 0
                         ? (
                               dailyWins /
                               dailyTotal
@@ -2175,26 +2018,19 @@
                 );
 
             elements.todayAccuracy.textContent =
-                dailyAccuracy !==
-                    null &&
+                dailyAccuracy !== null &&
                 Number.isFinite(
                     dailyAccuracy
                 )
-                    ? `${dailyAccuracy.toFixed(
-                          1
-                      )}%`
+                    ? `${dailyAccuracy.toFixed(1)}%`
                     : "--%";
 
             elements.weeklyAccuracy.textContent =
-                performance.accuracy !==
-                    null &&
-                performance.accuracy !==
-                    undefined
+                performance.accuracy !== null &&
+                performance.accuracy !== undefined
                     ? `${Number(
                           performance.accuracy
-                      ).toFixed(
-                          1
-                      )}%`
+                      ).toFixed(1)}%`
                     : "--%";
 
             const streak =
@@ -2213,11 +2049,7 @@
             rounds,
             recordDate = null
         ) {
-            if (
-                !Array.isArray(
-                    rounds
-                )
-            ) {
+            if (!Array.isArray(rounds)) {
                 return 0;
             }
 
@@ -2245,11 +2077,8 @@
             rounds
         ) {
             if (
-                !Array.isArray(
-                    rounds
-                ) ||
-                rounds.length ===
-                    0
+                !Array.isArray(rounds) ||
+                rounds.length === 0
             ) {
                 return "--";
             }
@@ -2263,9 +2092,7 @@
                             "LOSS"
                 );
 
-            if (
-                !resolved.length
-            ) {
+            if (!resolved.length) {
                 return "--";
             }
 
@@ -2275,8 +2102,7 @@
             let count = 0;
 
             for (
-                const round of
-                    resolved
+                const round of resolved
             ) {
                 if (
                     round.result ===
@@ -2360,59 +2186,24 @@
 
             script.textContent =
                 JSON.stringify({
-                    autosize:
-                        true,
-
-                    symbol:
-                        "COINBASE:BTCUSD",
-
-                    interval:
-                        "1",
-
-                    timezone:
-                        "Etc/UTC",
-
-                    theme:
-                        "dark",
-
-                    style:
-                        "1",
-
-                    hide_top_toolbar:
-                        false,
-
-                    hide_side_toolbar:
-                        true,
-
-                    hide_legend:
-                        false,
-
-                    hide_volume:
-                        false,
-
-                    allow_symbol_change:
-                        false,
-
-                    withdateranges:
-                        false,
-
-                    save_image:
-                        false,
-
-                    calendar:
-                        false,
-
-                    details:
-                        false,
-
-                    hotlist:
-                        false,
-
-                    studies:
-                        [],
-
-                    support_host:
-                        "https://www.tradingview.com"
+                    autosize: true,
+                    symbol: "COINBASE:BTCUSD",
+                    interval: "1",
+                    timezone: "Etc/UTC",
+                    theme: "dark",
+                    style: "1",
+                    hide_top_toolbar: false,
+                    hide_side_toolbar: true,
+                    hide_legend: false,
+                    hide_volume: false,
+                    allow_symbol_change: false,
+                    withdateranges: false,
+                    save_image: false,
+                    calendar: false,
+                    details: false,
+                    hotlist: false,
+                    studies: [],
+                    support_host: "https://www.tradingview.com"
                 });
 
             widgetContainer.appendChild(
@@ -2462,18 +2253,14 @@
             }
         }
 
-        function updateChartPrice(
-            data
-        ) {
+        function updateChartPrice(data) {
             const price =
                 Number(
                     data.btcIndexPrice
                 );
 
             if (
-                Number.isFinite(
-                    price
-                ) &&
+                Number.isFinite(price) &&
                 price > 0
             ) {
                 elements.chartPrice.textContent =
@@ -2504,8 +2291,34 @@
                 state.serverOffsetMs =
                     Number(
                         data.serverTime
-                    ) -
-                    Date.now();
+                    ) - Date.now();
+            }
+
+            if (
+                data.collectionRemaining !==
+                    undefined
+            ) {
+                const remaining =
+                    Number(
+                        data.collectionRemaining
+                    );
+
+                if (
+                    Number.isFinite(
+                        remaining
+                    ) &&
+                    remaining > 0
+                ) {
+                    state.collectionTargetServerMs =
+                        Number(
+                            data.serverTime
+                        ) +
+                        remaining *
+                            1000;
+                } else {
+                    state.collectionTargetServerMs =
+                        null;
+                }
             }
 
             updatePrediction(
@@ -2557,21 +2370,11 @@
                         "websocket",
                         "polling"
                     ],
-
-                    reconnection:
-                        true,
-
-                    reconnectionAttempts:
-                        Infinity,
-
-                    reconnectionDelay:
-                        1000,
-
-                    reconnectionDelayMax:
-                        5000,
-
-                    timeout:
-                        10000
+                    reconnection: true,
+                    reconnectionAttempts: Infinity,
+                    reconnectionDelay: 1000,
+                    reconnectionDelayMax: 5000,
+                    timeout: 10000
                 });
 
             socket.on(
@@ -2620,10 +2423,9 @@
             try {
                 const response =
                     await fetch(
-                        "/api/status",
+                        "/api/state",
                         {
-                            cache:
-                                "no-store"
+                            cache: "no-store"
                         }
                     );
 
@@ -2646,9 +2448,7 @@
                     data
                 );
 
-            } catch (
-                error
-            ) {
+            } catch (error) {
                 console.error(
                     "Failed to load Odin status:",
                     error
@@ -2662,8 +2462,7 @@
                     await fetch(
                         "/api/history",
                         {
-                            cache:
-                                "no-store"
+                            cache: "no-store"
                         }
                     );
 
@@ -2685,9 +2484,7 @@
                     return;
                 }
 
-            } catch (
-                error
-            ) {
+            } catch (error) {
                 console.error(
                     "Failed to load history:",
                     error
