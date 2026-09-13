@@ -1017,26 +1017,209 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    /*
-     * DCM market-data WebSocket is disabled because the production
-     * endpoint is returning HTTP 400 during the upgrade in Render.
-     * Odin uses the REST BTC index fallback instead and never retries
-     * the failing socket connection.
-     */
+    const WebSocketCtor =
+        globalThis.WebSocket;
 
     if (
-        dcmMarketSocketRetryTimer
+        typeof WebSocketCtor !==
+        "function"
     ) {
-        clearTimeout(
-            dcmMarketSocketRetryTimer
+        console.error(
+            "[ODIN] Native WebSocket is unavailable; DCM index feed cannot start."
         );
 
-        dcmMarketSocketRetryTimer =
-            null;
+        return;
     }
 
-    dcmMarketSocket =
-        null;
+    if (
+        dcmMarketSocket &&
+        (
+            dcmMarketSocket.readyState ===
+                0 ||
+            dcmMarketSocket.readyState ===
+                1
+        )
+    ) {
+        return;
+    }
+
+    try {
+        dcmMarketSocket =
+            new WebSocketCtor(
+                "wss://stream.crypto.com/dcm/v1/market"
+            );
+
+        dcmMarketSocket.onopen =
+            () => {
+                console.log(
+                    "[ODIN] DCM market-data websocket connected"
+                );
+
+                subscribeDCMMarketChannel(
+                    `index.${CONFIG.underlyingIndex}`
+                );
+
+                if (
+                    dcmSubscribedContractSymbol
+                ) {
+                    subscribeDCMMarketChannel(
+                        `settlement.${dcmSubscribedContractSymbol}`
+                    );
+                }
+            };
+
+        dcmMarketSocket.onmessage =
+            (event) => {
+                try {
+                    const message =
+                        JSON.parse(
+                            String(
+                                event.data
+                            )
+                        );
+
+                    const result =
+                        message?.result ||
+                        {};
+
+                    if (
+                        Number(message?.code) !== 0 &&
+                        message?.method ===
+                            "subscribe"
+                    ) {
+                        console.error(
+                            "[ODIN] DCM subscription rejected:",
+                            JSON.stringify(
+                                message
+                            )
+                        );
+                    }
+
+                    const channel =
+                        String(
+                            result.channel ||
+                                result.subscription ||
+                                ""
+                        );
+
+                    const data =
+                        Array.isArray(
+                            result.data
+                        )
+                            ? result.data
+                            : [];
+
+                    const item =
+                        data.length
+                            ? data[
+                                  data.length -
+                                      1
+                              ]
+                            : null;
+
+                    if (
+                        channel.startsWith(
+                            "index."
+                        ) &&
+                        item
+                    ) {
+                        const price =
+                            safeNumber(
+                                item.v
+                            );
+
+                        const timestamp =
+                            safeNumber(
+                                item.t
+                            );
+
+                        if (
+                            price !==
+                            null
+                        ) {
+                            dcmIndexCache = {
+                                price,
+
+                                timestamp:
+                                    timestamp ||
+                                    now()
+                            };
+                        }
+                    }
+
+                    if (
+                        channel.startsWith(
+                            "settlement."
+                        ) &&
+                        item
+                    ) {
+                        const price =
+                            safeNumber(
+                                item.v
+                            );
+
+                        const timestamp =
+                            safeNumber(
+                                item.t
+                            );
+
+                        if (
+                            price !==
+                            null
+                        ) {
+                            dcmSettlementCache = {
+                                price,
+
+                                timestamp:
+                                    timestamp ||
+                                    now(),
+
+                                symbol:
+                                    result.instrument_name ||
+                                    dcmSubscribedContractSymbol
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.error(
+                        "[ODIN] DCM market-data message error:",
+                        error.message
+                    );
+                }
+            };
+
+        dcmMarketSocket.onerror =
+            (error) => {
+                console.error(
+                    "[ODIN] DCM market-data websocket error:",
+                    error?.message ||
+                        error?.error ||
+                        "connection failed"
+                );
+            };
+
+        dcmMarketSocket.onclose =
+            () => {
+                console.log(
+                    "[ODIN] DCM market-data websocket disconnected"
+                );
+
+                dcmMarketSocket =
+                    null;
+
+                scheduleDCMMarketSocketReconnect();
+            };
+    } catch (error) {
+        dcmMarketSocket =
+            null;
+
+        console.error(
+            "[ODIN] DCM market-data websocket connection error:",
+            error.message
+        );
+
+        scheduleDCMMarketSocketReconnect();
+    }
 }
 
 async function getBTCIndex() {
@@ -4367,7 +4550,7 @@ function processSettlementCache() {
     );
 }
 
-async function resolveExpiredRoundFromIndex() {
+function resolveExpiredRoundFromIndex() {
     if (
         !currentRound ||
         currentRound.result ||
@@ -4391,10 +4574,8 @@ async function resolveExpiredRoundFromIndex() {
     }
 
     /*
-     * Prefer a DCM settlement value when one exists. The DCM websocket is
-     * unavailable in the Render environment, so use the documented REST
-     * BTC index history only when it contains a value at or immediately
-     * before this round's expiry. Never settle from the current BTC price.
+     * Never use a stale or unrelated price as an official
+     * settlement value. The settlement websocket is preferred.
      */
     if (
         dcmSettlementCache &&
@@ -4417,101 +4598,13 @@ async function resolveExpiredRoundFromIndex() {
                 dcmSettlementCache.timestamp
             )
         );
-
-        return;
-    }
-
-    try {
-        const result =
-            await cryptoRequest(
-                "public/get-valuations",
-                {
-                    instrument_name:
-                        CONFIG.fallbackUnderlyingIndex,
-
-                    valuation_type:
-                        "index_price",
-
-                    count: 3,
-
-                    start_ts:
-                        Math.max(
-                            0,
-                            expiry -
-                                120000
-                        ),
-
-                    end_ts:
-                        expiry +
-                        1000
-                }
-            );
-
-        const data =
-            Array.isArray(
-                result?.data
-            )
-                ? result.data
-                : [];
-
-        const candidates =
-            data
-                .map(
-                    (item) => ({
-                        price:
-                            safeNumber(
-                                item?.v
-                            ),
-
-                        timestamp:
-                            safeNumber(
-                                item?.t
-                            )
-                    })
-                )
-                .filter(
-                    (item) =>
-                        item.price !==
-                            null &&
-                        item.timestamp !==
-                            null &&
-                        item.timestamp <=
-                            expiry &&
-                        expiry -
-                            item.timestamp <=
-                            120000
-                )
-                .sort(
-                    (a, b) =>
-                        b.timestamp -
-                        a.timestamp
-                );
-
-        const settlement =
-            candidates[0];
-
-        if (
-            !settlement
-        ) {
-            return;
-        }
-
-        resolveCompletedRound(
-            settlement.price,
-            settlement.timestamp
-        );
-    } catch (error) {
-        console.error(
-            "[ODIN] REST index settlement lookup error:",
-            error.message
-        );
     }
 }
 
-async function updateRoundLifecycle() {
+function updateRoundLifecycle() {
     processSettlementCache();
 
-    await resolveExpiredRoundFromIndex();
+    resolveExpiredRoundFromIndex();
 
     if (
         currentRound &&
@@ -4540,10 +4633,10 @@ async function updateRoundLifecycle() {
     }
 }
 
-async function updateStateLoop() {
+function updateStateLoop() {
     updateContractState();
 
-    await updateRoundLifecycle();
+    updateRoundLifecycle();
 
     calculateForecast();
 
@@ -4587,7 +4680,7 @@ async function pollLoop() {
 
         await collectMarketData();
 
-        await updateStateLoop();
+        updateStateLoop();
 
         lastPoll =
             now();
