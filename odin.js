@@ -27,7 +27,16 @@ const CONFIG = {
     collectionSeconds: 180,
 
     pollIntervalMs: 1000,
-    instrumentRefreshMs: 15000,
+
+    /*
+     * DCM has 32,000+ BINARY_OPTION instruments.
+     * A full refresh takes much longer than 15 seconds,
+     * which can cause overlapping refreshes.
+     *
+     * Keep the instruments cached and refresh them
+     * once per minute instead.
+     */
+    instrumentRefreshMs: 60000,
 
     contractSelectionHorizonMs:
         14 *
@@ -110,6 +119,13 @@ let currentContract = null;
 
 let lastInstrumentRefresh = 0;
 let lastPoll = 0;
+
+/*
+ * Prevent a new poll from starting while the previous
+ * poll is still waiting for the 32,000+ instrument
+ * pagination or market-data requests to finish.
+ */
+let pollInProgress = false;
 
 let previousVelocity = null;
 let previousPrice = null;
@@ -2056,8 +2072,7 @@ async function collectContractData() {
                 (
                     ticker.bid +
                     ticker.ask
-                ) /
-                2;
+                ) / 2;
 
             state.marketProbability =
                 clamp(
@@ -2102,8 +2117,7 @@ function secondsSinceRoundStart() {
         (
             now() -
             currentRound.startedAt
-        ) /
-            1000
+        ) / 1000
     );
 }
 
@@ -2491,7 +2505,7 @@ function calculateForecast() {
     state.forecastConfidence =
         Math.abs(
             probability -
-                50
+            50
         );
 
     state.forecast =
@@ -2782,39 +2796,54 @@ function serializeState() {
 }
 
 async function poll() {
-    const currentTime =
-        now();
-
-    if (
-        currentTime -
-            lastInstrumentRefresh >=
-        CONFIG.instrumentRefreshMs
-    ) {
-        lastInstrumentRefresh =
-            currentTime;
-
-        await refreshInstruments();
+    /*
+     * The DCM instrument refresh can take 30+ seconds.
+     * Do not allow setInterval to start another poll while
+     * the previous one is still running.
+     */
+    if (pollInProgress) {
+        return;
     }
 
-    await collectMarketData();
+    pollInProgress = true;
 
-    resolveCurrentContract();
+    try {
+        const currentTime =
+            now();
 
-    await collectContractData();
+        if (
+            currentTime -
+                lastInstrumentRefresh >=
+            CONFIG.instrumentRefreshMs
+        ) {
+            lastInstrumentRefresh =
+                currentTime;
 
-    calculateStateMetrics();
+            await refreshInstruments();
+        }
 
-    calculateForecast();
+        await collectMarketData();
 
-    evaluateExpiredRound();
+        resolveCurrentContract();
 
-    state.serverTime =
-        now();
+        await collectContractData();
 
-    io.emit(
-        "odin:update",
-        serializeState()
-    );
+        calculateStateMetrics();
+
+        calculateForecast();
+
+        evaluateExpiredRound();
+
+        state.serverTime =
+            now();
+
+        io.emit(
+            "odin:update",
+            serializeState()
+        );
+    } finally {
+        pollInProgress = false;
+    }
 }
 
 app.get(
