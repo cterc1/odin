@@ -27,15 +27,6 @@ const CONFIG = {
     collectionSeconds: 180,
 
     pollIntervalMs: 1000,
-
-    /*
-     * DCM has 32,000+ BINARY_OPTION instruments.
-     * A full refresh takes much longer than 15 seconds,
-     * which can cause overlapping refreshes.
-     *
-     * Keep the instruments cached and refresh them
-     * once per minute instead.
-     */
     instrumentRefreshMs: 60000,
 
     contractSelectionHorizonMs:
@@ -120,13 +111,6 @@ let currentContract = null;
 let lastInstrumentRefresh = 0;
 let lastPoll = 0;
 
-/*
- * Prevent a new poll from starting while the previous
- * poll is still waiting for the 32,000+ instrument
- * pagination or market-data requests to finish.
- */
-let pollInProgress = false;
-
 let previousVelocity = null;
 let previousPrice = null;
 
@@ -135,6 +119,8 @@ let currentRound = null;
 let lastNoContractLog = 0;
 
 let rawBinaryInstruments = [];
+
+let instrumentRefreshInProgress = false;
 
 function now() {
     return Date.now();
@@ -1201,6 +1187,19 @@ function selectCurrentContract(
 }
 
 async function refreshInstruments() {
+    if (
+        instrumentRefreshInProgress
+    ) {
+        console.log(
+            "[ODIN] Instrument refresh already in progress - skipping duplicate refresh"
+        );
+
+        return;
+    }
+
+    instrumentRefreshInProgress =
+        true;
+
     try {
         const all =
             await getInstruments();
@@ -1476,6 +1475,9 @@ async function refreshInstruments() {
             "[ODIN] Instrument refresh error:",
             error.message
         );
+    } finally {
+        instrumentRefreshInProgress =
+            false;
     }
 }
 
@@ -2117,7 +2119,8 @@ function secondsSinceRoundStart() {
         (
             now() -
             currentRound.startedAt
-        ) / 1000
+        ) /
+            1000
     );
 }
 
@@ -2505,7 +2508,7 @@ function calculateForecast() {
     state.forecastConfidence =
         Math.abs(
             probability -
-            50
+                50
         );
 
     state.forecast =
@@ -2796,54 +2799,43 @@ function serializeState() {
 }
 
 async function poll() {
-    /*
-     * The DCM instrument refresh can take 30+ seconds.
-     * Do not allow setInterval to start another poll while
-     * the previous one is still running.
-     */
-    if (pollInProgress) {
-        return;
-    }
+    const currentTime =
+        now();
 
-    pollInProgress = true;
-
-    try {
-        const currentTime =
-            now();
-
+    if (
+        currentTime -
+            lastInstrumentRefresh >=
+        CONFIG.instrumentRefreshMs
+    ) {
         if (
-            currentTime -
-                lastInstrumentRefresh >=
-            CONFIG.instrumentRefreshMs
+            !instrumentRefreshInProgress
         ) {
             lastInstrumentRefresh =
                 currentTime;
 
             await refreshInstruments();
         }
-
-        await collectMarketData();
-
-        resolveCurrentContract();
-
-        await collectContractData();
-
-        calculateStateMetrics();
-
-        calculateForecast();
-
-        evaluateExpiredRound();
-
-        state.serverTime =
-            now();
-
-        io.emit(
-            "odin:update",
-            serializeState()
-        );
-    } finally {
-        pollInProgress = false;
     }
+
+    await collectMarketData();
+
+    resolveCurrentContract();
+
+    await collectContractData();
+
+    calculateStateMetrics();
+
+    calculateForecast();
+
+    evaluateExpiredRound();
+
+    state.serverTime =
+        now();
+
+    io.emit(
+        "odin:update",
+        serializeState()
+    );
 }
 
 app.get(
@@ -3006,6 +2998,15 @@ server.listen(
         console.log("");
 
         await refreshInstruments();
+
+        /*
+         * The initial instrument refresh has now completed.
+         * Start the refresh timer from this point so the first
+         * poll does not immediately download all instruments again.
+         */
+
+        lastInstrumentRefresh =
+            now();
 
         setInterval(
             async () => {
