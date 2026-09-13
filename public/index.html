@@ -258,25 +258,20 @@
 
         .chart-wrap {
             height: 385px;
-            padding: 10px 14px 14px;
+            padding: 0;
             position: relative;
+            overflow: hidden;
+            background: #10131a;
         }
 
-        #btcChart {
+        .tradingview-widget-container {
             width: 100%;
             height: 100%;
-            display: block;
         }
 
-        .chart-empty {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #626b7e;
-            font-size: 13px;
-            pointer-events: none;
+        .tradingview-widget-container__widget {
+            width: 100%;
+            height: 100%;
         }
 
         .bottom-grid {
@@ -722,21 +717,21 @@
 
                         <button
                             class="time-button active"
-                            data-timeframe="1m"
+                            data-timeframe="1"
                         >
                             1m
                         </button>
 
                         <button
                             class="time-button"
-                            data-timeframe="5m"
+                            data-timeframe="5"
                         >
                             5m
                         </button>
 
                         <button
                             class="time-button"
-                            data-timeframe="15m"
+                            data-timeframe="15"
                         >
                             15m
                         </button>
@@ -747,13 +742,13 @@
 
                 <div class="chart-wrap">
 
-                    <canvas id="btcChart"></canvas>
-
                     <div
-                        class="chart-empty"
-                        id="chartEmpty"
+                        class="tradingview-widget-container"
+                        id="tradingviewChart"
                     >
-                        Waiting for BTC price data...
+                        <div
+                            class="tradingview-widget-container__widget"
+                        ></div>
                     </div>
 
                 </div>
@@ -1064,8 +1059,7 @@
 
     <script>
         const state = {
-            timeframe: "1m",
-            priceHistory: [],
+            timeframe: "1",
             latest: null
         };
 
@@ -1216,25 +1210,8 @@
             weeklyStreak:
                 document.getElementById(
                     "weeklyStreak"
-                ),
-
-            chart:
-                document.getElementById(
-                    "btcChart"
-                ),
-
-            chartEmpty:
-                document.getElementById(
-                    "chartEmpty"
                 )
         };
-
-        let chartContext = null;
-
-        if (elements.chart) {
-            chartContext =
-                elements.chart.getContext("2d");
-        }
 
         function number(
             value,
@@ -1301,56 +1278,6 @@
                     numberValue,
                     decimals
                 )}`
-            );
-        }
-
-        function signedPercentFromDecimal(
-            value
-        ) {
-            if (
-                value === null ||
-                value === undefined ||
-                !Number.isFinite(
-                    Number(value)
-                )
-            ) {
-                return "--";
-            }
-
-            const n =
-                Number(value) * 100;
-
-            return (
-                `${n >= 0 ? "+" : ""}` +
-                `${n.toFixed(3)}%`
-            );
-        }
-
-        function formatTime(
-            timestamp
-        ) {
-            if (!timestamp) {
-                return "--";
-            }
-
-            const date =
-                new Date(timestamp);
-
-            if (
-                Number.isNaN(
-                    date.getTime()
-                )
-            ) {
-                return "--";
-            }
-
-            return date.toLocaleTimeString(
-                [],
-                {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    second: "2-digit"
-                }
             );
         }
 
@@ -1672,7 +1599,8 @@
         function calculateStreak(
             rounds
         ) {
-            if (!Array.isArray(rounds) ||
+            if (
+                !Array.isArray(rounds) ||
                 rounds.length === 0
             ) {
                 return "--";
@@ -1712,574 +1640,75 @@
             return `${count} ${first}`;
         }
 
-        function addPricePoint(
-            data
+        /*
+         * TradingView BTC/USD chart.
+         *
+         * The old canvas chart has been removed.
+         * TradingView now provides the live chart,
+         * candles, price scale, volume, crosshair,
+         * and all normal chart controls.
+         */
+
+        function loadTradingViewChart(
+            interval
         ) {
-            if (
-                !data ||
-                data.btcPrice === null ||
-                data.btcPrice === undefined ||
-                !Number.isFinite(
-                    Number(
-                        data.btcPrice
-                    )
-                )
-            ) {
+            const container =
+                document.getElementById(
+                    "tradingviewChart"
+                );
+
+            if (!container) {
                 return;
             }
 
-            const timestamp =
-                data.lastUpdate
-                    ? Number(
-                          data.lastUpdate
-                      )
-                    : Date.now();
-
-            const strike =
-                data.strikePrice !== null &&
-                data.strikePrice !== undefined
-                    ? Number(
-                          data.strikePrice
-                      )
-                    : null;
-
-            state.priceHistory.push({
-                time: timestamp,
-                price: Number(
-                    data.btcPrice
-                ),
-                strike
-            });
-
-            const cutoff =
-                Date.now() -
-                60 * 60 * 1000;
-
-            state.priceHistory =
-                state.priceHistory.filter(
-                    point =>
-                        point.time >=
-                        cutoff
-                );
-        }
-
-        function aggregatePoints(
-            minutes
-        ) {
-            const now =
-                Date.now();
-
-            const cutoff =
-                now -
-                minutes *
-                    60 *
-                    1000;
-
-            const points =
-                state.priceHistory.filter(
-                    point =>
-                        point.time >=
-                        cutoff
+            const widget =
+                container.querySelector(
+                    ".tradingview-widget-container__widget"
                 );
 
-            if (
-                minutes === 1
-            ) {
-                return points;
-            }
-
-            if (
-                points.length === 0
-            ) {
-                return [];
-            }
-
-            const bucketSize =
-                minutes *
-                60 *
-                1000;
-
-            const buckets =
-                new Map();
-
-            for (
-                const point of points
-            ) {
-                const bucket =
-                    Math.floor(
-                        point.time /
-                            bucketSize
-                    ) *
-                    bucketSize;
-
-                if (
-                    !buckets.has(
-                        bucket
-                    )
-                ) {
-                    buckets.set(
-                        bucket,
-                        []
-                    );
-                }
-
-                buckets
-                    .get(bucket)
-                    .push(point);
-            }
-
-            return Array.from(
-                buckets.entries()
-            )
-                .sort(
-                    (a, b) =>
-                        a[0] -
-                        b[0]
-                )
-                .map(
-                    ([time, bucket]) => {
-                        const prices =
-                            bucket.map(
-                                point =>
-                                    point.price
-                            );
-
-                        const strikes =
-                            bucket
-                                .map(
-                                    point =>
-                                        point.strike
-                                )
-                                .filter(
-                                    value =>
-                                        Number.isFinite(
-                                            value
-                                        )
-                                );
-
-                        const average =
-                            prices.reduce(
-                                (
-                                    sum,
-                                    value
-                                ) =>
-                                    sum +
-                                    value,
-                                0
-                            ) /
-                            prices.length;
-
-                        const strike =
-                            strikes.length >
-                            0
-                                ? strikes[
-                                      strikes.length -
-                                          1
-                                  ]
-                                : null;
-
-                        return {
-                            time,
-                            price:
-                                average,
-                            strike
-                        };
-                    }
-                );
-        }
-
-        function drawChart() {
-            if (
-                !elements.chart ||
-                !chartContext
-            ) {
+            if (!widget) {
                 return;
             }
 
-            const canvas =
-                elements.chart;
+            widget.innerHTML = "";
 
-            const rect =
-                canvas.getBoundingClientRect();
-
-            const dpr =
-                window.devicePixelRatio ||
-                1;
-
-            canvas.width =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.width *
-                            dpr
-                    )
+            const script =
+                document.createElement(
+                    "script"
                 );
 
-            canvas.height =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.height *
-                            dpr
-                    )
-                );
-
-            chartContext.setTransform(
-                dpr,
-                0,
-                0,
-                dpr,
-                0,
-                0
-            );
-
-            const width =
-                rect.width;
-
-            const height =
-                rect.height;
-
-            chartContext.clearRect(
-                0,
-                0,
-                width,
-                height
-            );
-
-            const minutes =
-                state.timeframe ===
-                "1m"
-                    ? 1
-                    : state.timeframe ===
-                      "5m"
-                        ? 5
-                        : 15;
-
-            const points =
-                aggregatePoints(
-                    minutes
-                );
-
-            if (
-                points.length < 2
-            ) {
-                elements.chartEmpty.style.display =
-                    "flex";
-
-                return;
-            }
-
-            elements.chartEmpty.style.display =
-                "none";
-
-            const prices =
-                points.map(
-                    point =>
-                        point.price
-                );
-
-            const strikes =
-                points
-                    .map(
-                        point =>
-                            point.strike
-                    )
-                    .filter(
-                        value =>
-                            Number.isFinite(
-                                value
-                            )
-                    );
-
-            const allValues =
-                prices.concat(
-                    strikes
-                );
-
-            let min =
-                Math.min(
-                    ...allValues
-                );
-
-            let max =
-                Math.max(
-                    ...allValues
-                );
-
-            if (
-                min === max
-            ) {
-                min -= 1;
-                max += 1;
-            }
-
-            const padding =
-                (max - min) *
-                0.08;
-
-            min -= padding;
-            max += padding;
-
-            const left = 55;
-            const right = 15;
-            const top = 18;
-            const bottom = 28;
-
-            const chartWidth =
-                width -
-                left -
-                right;
-
-            const chartHeight =
-                height -
-                top -
-                bottom;
-
-            function xPosition(
-                index
-            ) {
-                if (
-                    points.length <=
-                    1
-                ) {
-                    return left;
-                }
-
-                return (
-                    left +
-                    (index /
-                        (points.length -
-                            1)) *
-                        chartWidth
-                );
-            }
-
-            function yPosition(
-                value
-            ) {
-                return (
-                    top +
-                    ((max - value) /
-                        (max - min)) *
-                        chartHeight
-                );
-            }
-
-            chartContext.strokeStyle =
-                "#1d222d";
-
-            chartContext.lineWidth =
-                1;
-
-            for (
-                let i = 0;
-                i <= 4;
-                i++
-            ) {
-                const y =
-                    top +
-                    (chartHeight /
-                        4) *
-                        i;
-
-                chartContext.beginPath();
-
-                chartContext.moveTo(
-                    left,
-                    y
-                );
-
-                chartContext.lineTo(
-                    width -
-                        right,
-                    y
-                );
-
-                chartContext.stroke();
-
-                const value =
-                    max -
-                    ((max -
-                        min) /
-                        4) *
-                        i;
-
-                chartContext.fillStyle =
-                    "#626b7e";
-
-                chartContext.font =
-                    "11px Arial";
-
-                chartContext.textAlign =
-                    "right";
-
-                chartContext.fillText(
-                    `$${number(
-                        value,
-                        0
-                    )}`,
-                    left - 8,
-                    y + 4
-                );
-            }
-
-            chartContext.beginPath();
-
-            points.forEach(
-                (
-                    point,
-                    index
-                ) => {
-                    const x =
-                        xPosition(
-                            index
-                        );
-
-                    const y =
-                        yPosition(
-                            point.price
-                        );
-
-                    if (
-                        index === 0
-                    ) {
-                        chartContext.moveTo(
-                            x,
-                            y
-                        );
-                    } else {
-                        chartContext.lineTo(
-                            x,
-                            y
-                        );
-                    }
-                }
-            );
-
-            chartContext.strokeStyle =
-                "#dce1e8";
-
-            chartContext.lineWidth =
-                2;
-
-            chartContext.stroke();
-
-            const latestStrike =
-                points
-                    .slice()
-                    .reverse()
-                    .find(
-                        point =>
-                            Number.isFinite(
-                                point.strike
-                            )
-                    );
-
-            if (
-                latestStrike
-            ) {
-                const strikeY =
-                    yPosition(
-                        latestStrike.strike
-                    );
-
-                chartContext.beginPath();
-
-                chartContext.setLineDash(
-                    [
-                        7,
-                        6
-                    ]
-                );
-
-                chartContext.moveTo(
-                    left,
-                    strikeY
-                );
-
-                chartContext.lineTo(
-                    width -
-                        right,
-                    strikeY
-                );
-
-                chartContext.strokeStyle =
-                    "#7f8cff";
-
-                chartContext.lineWidth =
-                    1;
-
-                chartContext.stroke();
-
-                chartContext.setLineDash(
-                    []
-                );
-
-                chartContext.fillStyle =
-                    "#7f8cff";
-
-                chartContext.font =
-                    "11px Arial";
-
-                chartContext.textAlign =
-                    "left";
-
-                chartContext.fillText(
-                    `Strike $${number(
-                        latestStrike.strike,
-                        2
-                    )}`,
-                    left + 6,
-                    strikeY - 7
-                );
-            }
-
-            const latest =
-                points[
-                    points.length - 1
-                ];
-
-            const latestX =
-                xPosition(
-                    points.length - 1
-                );
-
-            const latestY =
-                yPosition(
-                    latest.price
-                );
-
-            chartContext.beginPath();
-
-            chartContext.arc(
-                latestX,
-                latestY,
-                4,
-                0,
-                Math.PI * 2
-            );
-
-            chartContext.fillStyle =
-                "#ffffff";
-
-            chartContext.fill();
-
-            chartContext.fillStyle =
-                "#8a93a6";
-
-            chartContext.font =
-                "11px Arial";
-
-            chartContext.textAlign =
-                "right";
-
-            chartContext.fillText(
-                formatTime(
-                    latest.time
-                ),
-                width -
-                    right,
-                height - 8
+            script.type =
+                "text/javascript";
+
+            script.src =
+                "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+
+            script.async = true;
+
+            script.innerHTML =
+                JSON.stringify({
+                    autosize: true,
+                    symbol: "COINBASE:BTCUSD",
+                    interval: String(
+                        interval
+                    ),
+                    timezone: "America/New_York",
+                    theme: "dark",
+                    style: "1",
+                    locale: "en",
+                    allow_symbol_change: false,
+                    hide_top_toolbar: false,
+                    hide_legend: false,
+                    hide_side_toolbar: false,
+                    withdateranges: true,
+                    save_image: false,
+                    calendar: false,
+                    support_host:
+                        "https://www.tradingview.com"
+                });
+
+            widget.appendChild(
+                script
             );
         }
 
@@ -2304,7 +1733,9 @@
                     }
                 );
 
-            drawChart();
+            loadTradingViewChart(
+                timeframe
+            );
         }
 
         document
@@ -2324,11 +1755,6 @@
                     );
                 }
             );
-
-        window.addEventListener(
-            "resize",
-            drawChart
-        );
 
         function handleUpdate(
             data
@@ -2355,12 +1781,6 @@
             updateRecords(
                 data
             );
-
-            addPricePoint(
-                data
-            );
-
-            drawChart();
         }
 
         function connectSocket() {
@@ -2483,55 +1903,6 @@
                     return;
                 }
 
-                for (
-                    const item of data.rounds
-                ) {
-                    if (
-                        item.collectionStartPrice !==
-                        null &&
-                        item.collectionStartPrice !==
-                        undefined
-                    ) {
-                        const price =
-                            Number(
-                                item.collectionStartPrice
-                            );
-
-                        if (
-                            Number.isFinite(
-                                price
-                            )
-                        ) {
-                            state.priceHistory.push(
-                                {
-                                    time:
-                                        Number(
-                                            item.startedAt
-                                        ),
-                                    price,
-                                    strike:
-                                        Number(
-                                            item.strike
-                                        )
-                                }
-                            );
-                        }
-                    }
-                }
-
-                state.priceHistory =
-                    state.priceHistory.filter(
-                        point =>
-                            Number.isFinite(
-                                point.time
-                            ) &&
-                            Number.isFinite(
-                                point.price
-                            )
-                    );
-
-                drawChart();
-
             } catch (error) {
                 console.error(
                     "Failed to load history:",
@@ -2550,7 +1921,9 @@
 
         loadHistory();
 
-        drawChart();
+        loadTradingViewChart(
+            state.timeframe
+        );
     </script>
 </body>
 </html>
