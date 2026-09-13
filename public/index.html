@@ -152,6 +152,12 @@
             color: #f2c96b;
         }
 
+        .prediction-call.sit-out {
+            color: #f2c96b;
+            font-size: 42px;
+            letter-spacing: -1.5px;
+        }
+
         .prediction-meta {
             text-align: right;
         }
@@ -294,10 +300,38 @@
             background: #10131a;
         }
 
-        #btcChart {
+        .tradingview-chart {
             width: 100%;
             height: 100%;
+            min-height: 0;
             display: block;
+        }
+
+        .tradingview-widget-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        .tradingview-widget-container__widget {
+            width: 100%;
+            height: calc(100% - 28px);
+        }
+
+        .tradingview-widget-copyright {
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            padding-right: 10px;
+            color: #626c7f;
+            font-size: 9px;
+            background: #10131a;
+        }
+
+        .tradingview-widget-copyright a {
+            color: #7f8cff;
+            text-decoration: none;
         }
 
         .chart-overlay {
@@ -309,6 +343,7 @@
             justify-content: space-between;
             align-items: flex-start;
             pointer-events: none;
+            z-index: 5;
         }
 
         .chart-price {
@@ -343,6 +378,7 @@
             color: #687184;
             font-size: 13px;
             pointer-events: none;
+            z-index: 4;
         }
 
         .bottom-grid {
@@ -861,9 +897,10 @@
 
                 <div class="chart-wrap">
 
-                    <canvas
-                        id="btcChart"
-                    ></canvas>
+                    <div
+                        id="tradingViewChart"
+                        class="tradingview-chart"
+                    ></div>
 
                     <div
                         class="chart-overlay"
@@ -1200,9 +1237,11 @@
 
     <script>
         const state = {
-            latest: null,
+            latest:
+                null,
 
-            serverOffsetMs: 0,
+            serverOffsetMs:
+                0,
 
             collectionRemainingMs:
                 null,
@@ -1213,11 +1252,8 @@
             collectionTargetServerMs:
                 null,
 
-            lastPrice:
-                null,
-
-            chartPoints:
-                []
+            tradingViewInitialized:
+                false
         };
 
         const elements = {
@@ -1361,9 +1397,9 @@
                     "expiry"
                 ),
 
-            chart:
+            tradingViewChart:
                 document.getElementById(
-                    "btcChart"
+                    "tradingViewChart"
                 ),
 
             chartStatus:
@@ -1451,7 +1487,9 @@
                 return "--";
             }
 
-            return Number(value).toLocaleString(
+            return Number(
+                value
+            ).toLocaleString(
                 undefined,
                 {
                     minimumFractionDigits:
@@ -1476,7 +1514,11 @@
                 return "--";
             }
 
-            return `${Number(value).toFixed(1)}%`;
+            return `${Number(
+                value
+            ).toFixed(
+                1
+            )}%`;
         }
 
         function signedNumber(
@@ -1494,7 +1536,9 @@
             }
 
             const numberValue =
-                Number(value);
+                Number(
+                    value
+                );
 
             return (
                 `${numberValue >= 0 ? "+" : ""}` +
@@ -1513,7 +1557,9 @@
             }
 
             const date =
-                new Date(timestamp);
+                new Date(
+                    timestamp
+                );
 
             if (
                 Number.isNaN(
@@ -1526,9 +1572,14 @@
             return date.toLocaleTimeString(
                 [],
                 {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    second: "2-digit"
+                    hour:
+                        "numeric",
+
+                    minute:
+                        "2-digit",
+
+                    second:
+                        "2-digit"
                 }
             );
         }
@@ -1569,9 +1620,17 @@
             elements.predictionCall.textContent =
                 forecast;
 
+            const forecastClass =
+                forecast
+                    .toLowerCase()
+                    .replace(
+                        /\s+/g,
+                        "-"
+                    );
+
             elements.predictionCall.className =
                 "prediction-call " +
-                forecast.toLowerCase();
+                forecastClass;
 
             elements.predictionProbability.textContent =
                 percentFromBackend(
@@ -1662,7 +1721,8 @@
                     )
                         ? Number(
                               data.serverTime
-                          ) - Date.now()
+                          ) -
+                          Date.now()
                         : state.serverOffsetMs;
 
                 state.collectionTargetServerMs =
@@ -1691,18 +1751,26 @@
                     ).toUpperCase();
 
                 elements.collectionTimer.className =
-                    phase === "WAITING"
+                    phase ===
+                    "WAITING"
                         ? "collection-timer waiting"
                         : "collection-timer ready";
 
                 if (
-                    phase === "LOCKED" ||
+                    phase ===
+                        "LOCKED" ||
+                    phase ===
+                        "SIT_OUT" ||
                     data.forecastMade
                 ) {
                     elements.collectionStatusText.textContent =
-                        "Data collection complete. Forecast locked.";
+                        phase ===
+                            "SIT_OUT"
+                            ? "Data collection complete. Odin is sitting out this round."
+                            : "Data collection complete. Forecast locked.";
                 } else if (
-                    phase === "WAITING"
+                    phase ===
+                    "WAITING"
                 ) {
                     elements.collectionStatusText.textContent =
                         "Waiting for a 15-minute contract...";
@@ -1729,16 +1797,19 @@
 
             const totalSeconds =
                 Math.ceil(
-                    milliseconds / 1000
+                    milliseconds /
+                        1000
                 );
 
             const minutes =
                 Math.floor(
-                    totalSeconds / 60
+                    totalSeconds /
+                        60
                 );
 
             const seconds =
-                totalSeconds % 60;
+                totalSeconds %
+                60;
 
             return (
                 `${String(
@@ -1759,7 +1830,7 @@
         function renderCollectionTimer() {
             if (
                 state.collectionRemainingMs ===
-                    null
+                null
             ) {
                 elements.collectionTimerValue.textContent =
                     elements.collectionTimer.classList.contains(
@@ -1810,7 +1881,8 @@
                 );
 
             const total =
-                state.collectionTotalMs > 0
+                state.collectionTotalMs >
+                0
                     ? state.collectionTotalMs
                     : 1;
 
@@ -1860,8 +1932,10 @@
             data
         ) {
             elements.distanceValue.textContent =
-                data.strikeDistancePct !== null &&
-                data.strikeDistancePct !== undefined
+                data.strikeDistancePct !==
+                    null &&
+                data.strikeDistancePct !==
+                    undefined
                     ? signedNumber(
                           data.strikeDistance,
                           2
@@ -1903,8 +1977,10 @@
                 );
 
             elements.vwap.textContent =
-                data.vwap !== null &&
-                data.vwap !== undefined
+                data.vwap !==
+                    null &&
+                data.vwap !==
+                    undefined
                     ? `$${number(
                           data.vwap,
                           2
@@ -1918,8 +1994,10 @@
                 );
 
             elements.dataQuality.textContent =
-                data.dataQuality !== null &&
-                data.dataQuality !== undefined
+                data.dataQuality !==
+                    null &&
+                data.dataQuality !==
+                    undefined
                     ? `${number(
                           data.dataQuality,
                           0
@@ -1937,8 +2015,10 @@
                 );
 
             if (
-                data.marketProbability !== null &&
-                data.marketProbability !== undefined &&
+                data.marketProbability !==
+                    null &&
+                data.marketProbability !==
+                    undefined &&
                 Number.isFinite(
                     Number(
                         data.marketProbability
@@ -1965,14 +2045,18 @@
             data
         ) {
             elements.btcPrice.textContent =
-                data.btcIndexPrice !== null &&
-                data.btcIndexPrice !== undefined
+                data.btcIndexPrice !==
+                    null &&
+                data.btcIndexPrice !==
+                    undefined
                     ? `$${number(
                           data.btcIndexPrice,
                           2
                       )}`
-                    : data.btcPrice !== null &&
-                      data.btcPrice !== undefined
+                    : data.btcPrice !==
+                          null &&
+                      data.btcPrice !==
+                          undefined
                         ? `$${number(
                               data.btcPrice,
                               2
@@ -1980,8 +2064,10 @@
                         : "--";
 
             elements.strikePrice.textContent =
-                data.strikePrice !== null &&
-                data.strikePrice !== undefined
+                data.strikePrice !==
+                    null &&
+                data.strikePrice !==
+                    undefined
                     ? `$${number(
                           data.strikePrice,
                           2
@@ -2002,21 +2088,25 @@
             data
         ) {
             const performance =
-                data.performance || {};
+                data.performance ||
+                {};
 
             const wins =
                 Number(
-                    performance.wins || 0
+                    performance.wins ||
+                    0
                 );
 
             const losses =
                 Number(
-                    performance.losses || 0
+                    performance.losses ||
+                    0
                 );
 
             const total =
                 Number(
-                    performance.total || 0
+                    performance.total ||
+                    0
                 );
 
             const daily =
@@ -2045,12 +2135,15 @@
                 dailyLosses;
 
             const dailyAccuracy =
-                data.dailyAccuracy !== null &&
-                data.dailyAccuracy !== undefined
+                data.dailyAccuracy !==
+                    null &&
+                data.dailyAccuracy !==
+                    undefined
                     ? Number(
                           data.dailyAccuracy
                       )
-                    : dailyTotal > 0
+                    : dailyTotal >
+                          0
                         ? (
                               dailyWins /
                               dailyTotal
@@ -2082,7 +2175,8 @@
                 );
 
             elements.todayAccuracy.textContent =
-                dailyAccuracy !== null &&
+                dailyAccuracy !==
+                    null &&
                 Number.isFinite(
                     dailyAccuracy
                 )
@@ -2092,8 +2186,10 @@
                     : "--%";
 
             elements.weeklyAccuracy.textContent =
-                performance.accuracy !== null &&
-                performance.accuracy !== undefined
+                performance.accuracy !==
+                    null &&
+                performance.accuracy !==
+                    undefined
                     ? `${Number(
                           performance.accuracy
                       ).toFixed(
@@ -2152,7 +2248,8 @@
                 !Array.isArray(
                     rounds
                 ) ||
-                rounds.length === 0
+                rounds.length ===
+                    0
             ) {
                 return "--";
             }
@@ -2178,7 +2275,8 @@
             let count = 0;
 
             for (
-                const round of resolved
+                const round of
+                    resolved
             ) {
                 if (
                     round.result ===
@@ -2193,7 +2291,178 @@
             return `${count} ${first}`;
         }
 
-        function addChartPoint(
+        function initializeTradingViewChart() {
+            if (
+                !elements.tradingViewChart ||
+                state.tradingViewInitialized
+            ) {
+                return;
+            }
+
+            state.tradingViewInitialized =
+                true;
+
+            elements.tradingViewChart.innerHTML =
+                "";
+
+            const widgetContainer =
+                document.createElement(
+                    "div"
+                );
+
+            widgetContainer.className =
+                "tradingview-widget-container";
+
+            widgetContainer.style.width =
+                "100%";
+
+            widgetContainer.style.height =
+                "100%";
+
+            const widget =
+                document.createElement(
+                    "div"
+                );
+
+            widget.className =
+                "tradingview-widget-container__widget";
+
+            widget.style.width =
+                "100%";
+
+            widget.style.height =
+                "calc(100% - 28px)";
+
+            const copyright =
+                document.createElement(
+                    "div"
+                );
+
+            copyright.className =
+                "tradingview-widget-copyright";
+
+            copyright.innerHTML =
+                '<a href="https://www.tradingview.com/symbols/COINBASE-BTCUSD/" target="_blank" rel="noopener nofollow">BTCUSD chart</a><span> by TradingView</span>';
+
+            const script =
+                document.createElement(
+                    "script"
+                );
+
+            script.type =
+                "text/javascript";
+
+            script.src =
+                "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+
+            script.async =
+                true;
+
+            script.textContent =
+                JSON.stringify({
+                    autosize:
+                        true,
+
+                    symbol:
+                        "COINBASE:BTCUSD",
+
+                    interval:
+                        "1",
+
+                    timezone:
+                        "Etc/UTC",
+
+                    theme:
+                        "dark",
+
+                    style:
+                        "1",
+
+                    hide_top_toolbar:
+                        false,
+
+                    hide_side_toolbar:
+                        true,
+
+                    hide_legend:
+                        false,
+
+                    hide_volume:
+                        false,
+
+                    allow_symbol_change:
+                        false,
+
+                    withdateranges:
+                        false,
+
+                    save_image:
+                        false,
+
+                    calendar:
+                        false,
+
+                    details:
+                        false,
+
+                    hotlist:
+                        false,
+
+                    studies:
+                        [],
+
+                    support_host:
+                        "https://www.tradingview.com"
+                });
+
+            widgetContainer.appendChild(
+                widget
+            );
+
+            widgetContainer.appendChild(
+                copyright
+            );
+
+            widgetContainer.appendChild(
+                script
+            );
+
+            elements.tradingViewChart.appendChild(
+                widgetContainer
+            );
+
+            elements.chartStatus.textContent =
+                "Live • TradingView";
+
+            elements.chartSource.textContent =
+                "TRADINGVIEW • COINBASE:BTCUSD";
+        }
+
+        function updateTradingViewStatus() {
+            if (
+                !elements.tradingViewChart
+            ) {
+                return;
+            }
+
+            const iframe =
+                elements.tradingViewChart.querySelector(
+                    "iframe"
+                );
+
+            if (iframe) {
+                elements.chartStatus.textContent =
+                    "Live • TradingView";
+
+                elements.chartEmpty.style.display =
+                    "none";
+            } else {
+                elements.chartStatus.textContent =
+                    "Loading • TradingView";
+            }
+        }
+
+        function updateChartPrice(
             data
         ) {
             const price =
@@ -2202,427 +2471,17 @@
                 );
 
             if (
-                !Number.isFinite(
+                Number.isFinite(
                     price
-                ) ||
-                price <= 0
+                ) &&
+                price > 0
             ) {
-                return;
+                elements.chartPrice.textContent =
+                    `DCM BTC $${number(
+                        price,
+                        2
+                    )}`;
             }
-
-            const timestamp =
-                Number(
-                    data.serverTime
-                );
-
-            state.lastPrice =
-                price;
-
-            state.chartPoints.push({
-                time:
-                    Number.isFinite(
-                        timestamp
-                    )
-                        ? timestamp
-                        : Date.now(),
-
-                price
-            });
-
-            const cutoff =
-                Date.now() -
-                30 *
-                    60 *
-                    1000;
-
-            while (
-                state.chartPoints.length >
-                    1 &&
-                state.chartPoints[0].time <
-                    cutoff
-            ) {
-                state.chartPoints.shift();
-            }
-
-            while (
-                state.chartPoints.length >
-                360
-            ) {
-                state.chartPoints.shift();
-            }
-
-            elements.chartPrice.textContent =
-                `BTC $${number(
-                    price,
-                    2
-                )}`;
-
-            elements.chartStatus.textContent =
-                "Live";
-
-            elements.chartEmpty.style.display =
-                "none";
-        }
-
-        function drawChart() {
-            const canvas =
-                elements.chart;
-
-            if (!canvas) {
-                return;
-            }
-
-            const rect =
-                canvas.getBoundingClientRect();
-
-            const dpr =
-                window.devicePixelRatio ||
-                1;
-
-            const width =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.width
-                    )
-                );
-
-            const height =
-                Math.max(
-                    1,
-                    Math.floor(
-                        rect.height
-                    )
-                );
-
-            const pixelWidth =
-                Math.floor(
-                    width *
-                        dpr
-                );
-
-            const pixelHeight =
-                Math.floor(
-                    height *
-                        dpr
-                );
-
-            if (
-                canvas.width !==
-                    pixelWidth ||
-                canvas.height !==
-                    pixelHeight
-            ) {
-                canvas.width =
-                    pixelWidth;
-
-                canvas.height =
-                    pixelHeight;
-            }
-
-            const ctx =
-                canvas.getContext(
-                    "2d"
-                );
-
-            if (!ctx) {
-                return;
-            }
-
-            ctx.setTransform(
-                dpr,
-                0,
-                0,
-                dpr,
-                0,
-                0
-            );
-
-            ctx.clearRect(
-                0,
-                0,
-                width,
-                height
-            );
-
-            ctx.fillStyle =
-                "#10131a";
-
-            ctx.fillRect(
-                0,
-                0,
-                width,
-                height
-            );
-
-            const points =
-                state.chartPoints;
-
-            if (
-                points.length <
-                2
-            ) {
-                drawChartGrid(
-                    ctx,
-                    width,
-                    height
-                );
-
-                return;
-            }
-
-            const padding = {
-                left: 16,
-                right: 16,
-                top: 25,
-                bottom: 25
-            };
-
-            const plotWidth =
-                Math.max(
-                    1,
-                    width -
-                        padding.left -
-                        padding.right
-                );
-
-            const plotHeight =
-                Math.max(
-                    1,
-                    height -
-                        padding.top -
-                        padding.bottom
-                );
-
-            let min =
-                Math.min(
-                    ...points.map(
-                        point =>
-                            point.price
-                    )
-                );
-
-            let max =
-                Math.max(
-                    ...points.map(
-                        point =>
-                            point.price
-                    )
-                );
-
-            const range =
-                Math.max(
-                    max - min,
-                    Math.abs(
-                        max
-                    ) *
-                        0.0002,
-                    1
-                );
-
-            const pad =
-                range *
-                0.12;
-
-            min -=
-                pad;
-
-            max +=
-                pad;
-
-            drawChartGrid(
-                ctx,
-                width,
-                height
-            );
-
-            ctx.beginPath();
-
-            points.forEach(
-                (
-                    point,
-                    index
-                ) => {
-                    const x =
-                        padding.left +
-                        (
-                            index /
-                            Math.max(
-                                points.length -
-                                    1,
-                                1
-                            )
-                        ) *
-                            plotWidth;
-
-                    const y =
-                        padding.top +
-                        (
-                            1 -
-                            (
-                                point.price -
-                                min
-                            ) /
-                                (
-                                    max -
-                                    min
-                                )
-                        ) *
-                            plotHeight;
-
-                    if (
-                        index ===
-                        0
-                    ) {
-                        ctx.moveTo(
-                            x,
-                            y
-                        );
-                    } else {
-                        ctx.lineTo(
-                            x,
-                            y
-                        );
-                    }
-                }
-            );
-
-            ctx.strokeStyle =
-                "#7f8cff";
-
-            ctx.lineWidth =
-                2;
-
-            ctx.lineJoin =
-                "round";
-
-            ctx.lineCap =
-                "round";
-
-            ctx.stroke();
-
-            const last =
-                points[
-                    points.length -
-                        1
-                ];
-
-            const lastX =
-                padding.left +
-                plotWidth;
-
-            const lastY =
-                padding.top +
-                (
-                    1 -
-                    (
-                        last.price -
-                        min
-                    ) /
-                        (
-                            max -
-                            min
-                        )
-                ) *
-                    plotHeight;
-
-            ctx.beginPath();
-
-            ctx.arc(
-                lastX,
-                lastY,
-                4,
-                0,
-                Math.PI *
-                    2
-            );
-
-            ctx.fillStyle =
-                "#45d39b";
-
-            ctx.fill();
-        }
-
-        function drawChartGrid(
-            ctx,
-            width,
-            height
-        ) {
-            const horizontalLines =
-                5;
-
-            ctx.strokeStyle =
-                "rgba(80, 91, 112, 0.18)";
-
-            ctx.lineWidth =
-                1;
-
-            for (
-                let i = 0;
-                i <=
-                    horizontalLines;
-                i++
-            ) {
-                const y =
-                    25 +
-                    (
-                        (
-                            height -
-                            50
-                        ) /
-                        horizontalLines
-                    ) *
-                        i;
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    0,
-                    y
-                );
-
-                ctx.lineTo(
-                    width,
-                    y
-                );
-
-                ctx.stroke();
-            }
-
-            const verticalLines =
-                6;
-
-            for (
-                let i = 0;
-                i <=
-                    verticalLines;
-                i++
-            ) {
-                const x =
-                    (
-                        width /
-                        verticalLines
-                    ) *
-                    i;
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    x,
-                    0
-                );
-
-                ctx.lineTo(
-                    x,
-                    height
-                );
-
-                ctx.stroke();
-            }
-        }
-
-        function resizeChart() {
-            drawChart();
         }
 
         function handleUpdate(
@@ -2669,11 +2528,11 @@
                 data
             );
 
-            addChartPoint(
+            updateChartPrice(
                 data
             );
 
-            drawChart();
+            updateTradingViewStatus();
         }
 
         function connectSocket() {
@@ -2787,7 +2646,9 @@
                     data
                 );
 
-            } catch (error) {
+            } catch (
+                error
+            ) {
                 console.error(
                     "Failed to load Odin status:",
                     error
@@ -2824,7 +2685,9 @@
                     return;
                 }
 
-            } catch (error) {
+            } catch (
+                error
+            ) {
                 console.error(
                     "Failed to load history:",
                     error
@@ -2834,8 +2697,6 @@
 
         function animationLoop() {
             renderCollectionTimer();
-
-            drawChart();
 
             window.requestAnimationFrame(
                 animationLoop
@@ -2852,9 +2713,11 @@
 
         loadHistory();
 
-        window.addEventListener(
-            "resize",
-            resizeChart
+        initializeTradingViewChart();
+
+        window.setInterval(
+            updateTradingViewStatus,
+            5000
         );
 
         window.requestAnimationFrame(
