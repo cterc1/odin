@@ -230,34 +230,8 @@
             min-height: 445px;
         }
 
-        .chart-controls {
-            display: flex;
-            gap: 6px;
-        }
-
-        .time-button {
-            border: 1px solid #292f3c;
-            background: #151922;
-            color: #7f8799;
-            border-radius: 7px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .time-button:hover {
-            background: #1b202b;
-            color: #e8ebf0;
-        }
-
-        .time-button.active {
-            background: #252c3b;
-            color: #ffffff;
-            border-color: #3a4357;
-        }
-
         .chart-wrap {
-            height: 385px;
+            height: 401px;
             padding: 0;
             position: relative;
             overflow: hidden;
@@ -266,12 +240,22 @@
 
         .tradingview-widget-container {
             width: 100%;
-            height: 100%;
+            height: 100% !important;
+            min-height: 100%;
         }
 
         .tradingview-widget-container__widget {
             width: 100%;
-            height: 100%;
+            height: 100% !important;
+            min-height: 100%;
+        }
+
+        .tradingview-widget-container__widget iframe {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100%;
+            display: block;
+            border: 0;
         }
 
         .bottom-grid {
@@ -713,31 +697,6 @@
                         Live BTC Chart
                     </div>
 
-                    <div class="chart-controls">
-
-                        <button
-                            class="time-button active"
-                            data-timeframe="1"
-                        >
-                            1m
-                        </button>
-
-                        <button
-                            class="time-button"
-                            data-timeframe="5"
-                        >
-                            5m
-                        </button>
-
-                        <button
-                            class="time-button"
-                            data-timeframe="15"
-                        >
-                            15m
-                        </button>
-
-                    </div>
-
                 </div>
 
                 <div class="chart-wrap">
@@ -1059,7 +1018,6 @@
 
     <script>
         const state = {
-            timeframe: "1",
             latest: null
         };
 
@@ -1643,15 +1601,12 @@
         /*
          * TradingView BTC/USD chart.
          *
-         * The old canvas chart has been removed.
-         * TradingView now provides the live chart,
+         * TradingView provides the live chart,
          * candles, price scale, volume, crosshair,
-         * and all normal chart controls.
+         * timeframe controls, and normal chart controls.
          */
 
-        function loadTradingViewChart(
-            interval
-        ) {
+        function loadTradingViewChart() {
             const container =
                 document.getElementById(
                     "tradingviewChart"
@@ -1689,9 +1644,7 @@
                 JSON.stringify({
                     autosize: true,
                     symbol: "COINBASE:BTCUSD",
-                    interval: String(
-                        interval
-                    ),
+                    interval: "1",
                     timezone: "America/New_York",
                     theme: "dark",
                     style: "1",
@@ -1711,50 +1664,6 @@
                 script
             );
         }
-
-        function setTimeframe(
-            timeframe
-        ) {
-            state.timeframe =
-                timeframe;
-
-            document
-                .querySelectorAll(
-                    ".time-button"
-                )
-                .forEach(
-                    button => {
-                        button.classList.toggle(
-                            "active",
-                            button.dataset
-                                .timeframe ===
-                                timeframe
-                        );
-                    }
-                );
-
-            loadTradingViewChart(
-                timeframe
-            );
-        }
-
-        document
-            .querySelectorAll(
-                ".time-button"
-            )
-            .forEach(
-                button => {
-                    button.addEventListener(
-                        "click",
-                        () => {
-                            setTimeframe(
-                                button.dataset
-                                    .timeframe
-                            );
-                        }
-                    );
-                }
-            );
 
         function handleUpdate(
             data
@@ -1921,9 +1830,7 @@
 
         loadHistory();
 
-        loadTradingViewChart(
-            state.timeframe
-        );
+        loadTradingViewChart();
     </script>
 </body>
 </html>
