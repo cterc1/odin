@@ -1017,271 +1017,26 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    let WebSocketCtor;
-
-    try {
-        WebSocketCtor =
-            require("ws");
-    } catch (error) {
-        WebSocketCtor =
-            globalThis.WebSocket;
-    }
+    /*
+     * DCM market-data WebSocket is disabled because the production
+     * endpoint is returning HTTP 400 during the upgrade in Render.
+     * Odin uses the REST BTC index fallback instead and never retries
+     * the failing socket connection.
+     */
 
     if (
-        typeof WebSocketCtor !==
-        "function"
+        dcmMarketSocketRetryTimer
     ) {
-        console.error(
-            "[ODIN] WebSocket client is unavailable; DCM index feed cannot start."
+        clearTimeout(
+            dcmMarketSocketRetryTimer
         );
 
-        return;
-    }
-
-    if (
-        dcmMarketSocket &&
-        (
-            dcmMarketSocket.readyState ===
-                0 ||
-            dcmMarketSocket.readyState ===
-                1
-        )
-    ) {
-        return;
-    }
-
-    try {
-        dcmMarketSocket =
-            new WebSocketCtor(
-                "wss://stream.crypto.com/dcm/v1/market"
-            );
-
-        dcmMarketSocket.on(
-            "open",
-            () => {
-                console.log(
-                    "[ODIN] DCM market-data websocket connected"
-                );
-
-                /*
-                 * Crypto.com recommends a short delay after opening
-                 * the websocket before sending requests. This avoids
-                 * the connection-time rate-limit window.
-                 */
-                setTimeout(
-                    () => {
-                        if (
-                            !dcmMarketSocket ||
-                            dcmMarketSocket.readyState !==
-                                1
-                        ) {
-                            return;
-                        }
-
-                        subscribeDCMMarketChannel(
-                            `index.${CONFIG.underlyingIndex}`
-                        );
-
-                        if (
-                            dcmSubscribedContractSymbol
-                        ) {
-                            subscribeDCMMarketChannel(
-                                `settlement.${dcmSubscribedContractSymbol}`
-                            );
-                        }
-                    },
-                    1000
-                );
-            }
-        );
-
-        dcmMarketSocket.on(
-            "message",
-            (data) => {
-                try {
-                    const message =
-                        JSON.parse(
-                            data.toString()
-                        );
-
-                    /*
-                     * Crypto.com sends public/heartbeat messages on
-                     * market-data sockets. Respond immediately or the
-                     * server can terminate the connection.
-                     */
-                    if (
-                        message?.method ===
-                        "public/heartbeat"
-                    ) {
-                        if (
-                            dcmMarketSocket &&
-                            dcmMarketSocket.readyState ===
-                                1
-                        ) {
-                            dcmMarketSocket.send(
-                                JSON.stringify({
-                                    id:
-                                        String(
-                                            message.id ??
-                                                dcmMarketSocketRequestId++
-                                        ),
-
-                                    method:
-                                        "public/respond-heartbeat"
-                                })
-                            );
-                        }
-
-                        return;
-                    }
-
-                    const result =
-                        message?.result ||
-                        {};
-
-                    if (
-                        Number(message?.code) !== 0 &&
-                        message?.method ===
-                            "subscribe"
-                    ) {
-                        console.error(
-                            "[ODIN] DCM subscription rejected:",
-                            JSON.stringify(
-                                message
-                            )
-                        );
-                    }
-
-                    const channel =
-                        String(
-                            result.channel ||
-                                result.subscription ||
-                                ""
-                        );
-
-                    const data =
-                        Array.isArray(
-                            result.data
-                        )
-                            ? result.data
-                            : [];
-
-                    const item =
-                        data.length
-                            ? data[
-                                  data.length -
-                                      1
-                              ]
-                            : null;
-
-                    if (
-                        channel.startsWith(
-                            "index."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmIndexCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now()
-                            };
-                        }
-                    }
-
-                    if (
-                        channel.startsWith(
-                            "settlement."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmSettlementCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now(),
-
-                                symbol:
-                                    result.instrument_name ||
-                                    dcmSubscribedContractSymbol
-                            };
-                        }
-                    }
-                } catch (error) {
-                    console.error(
-                        "[ODIN] DCM market-data message error:",
-                        error.message
-                    );
-                }
-            }
-        );
-
-        dcmMarketSocket.on(
-            "error",
-            (error) => {
-                console.error(
-                    "[ODIN] DCM market-data websocket error:",
-                    error?.message ||
-                        error?.error ||
-                        "connection failed"
-                );
-            }
-        );
-
-        dcmMarketSocket.on(
-            "close",
-            (code, reason) => {
-                console.log(
-                    `[ODIN] DCM market-data websocket disconnected (code=${code ?? "unknown"}, reason=${reason ? reason.toString() : "none"})`
-                );
-
-                dcmMarketSocket =
-                    null;
-
-                scheduleDCMMarketSocketReconnect();
-            }
-        );
-    } catch (error) {
-        dcmMarketSocket =
+        dcmMarketSocketRetryTimer =
             null;
-
-        console.error(
-            "[ODIN] DCM market-data websocket connection error:",
-            error.message
-        );
-
-        scheduleDCMMarketSocketReconnect();
     }
+
+    dcmMarketSocket =
+        null;
 }
 
 async function getBTCIndex() {
@@ -4612,7 +4367,7 @@ function processSettlementCache() {
     );
 }
 
-function resolveExpiredRoundFromIndex() {
+async function resolveExpiredRoundFromIndex() {
     if (
         !currentRound ||
         currentRound.result ||
@@ -4636,8 +4391,10 @@ function resolveExpiredRoundFromIndex() {
     }
 
     /*
-     * Never use a stale or unrelated price as an official
-     * settlement value. The settlement websocket is preferred.
+     * Prefer a DCM settlement value when one exists. The DCM websocket is
+     * unavailable in the Render environment, so use the documented REST
+     * BTC index history only when it contains a value at or immediately
+     * before this round's expiry. Never settle from the current BTC price.
      */
     if (
         dcmSettlementCache &&
@@ -4660,13 +4417,101 @@ function resolveExpiredRoundFromIndex() {
                 dcmSettlementCache.timestamp
             )
         );
+
+        return;
+    }
+
+    try {
+        const result =
+            await cryptoRequest(
+                "public/get-valuations",
+                {
+                    instrument_name:
+                        CONFIG.fallbackUnderlyingIndex,
+
+                    valuation_type:
+                        "index_price",
+
+                    count: 3,
+
+                    start_ts:
+                        Math.max(
+                            0,
+                            expiry -
+                                120000
+                        ),
+
+                    end_ts:
+                        expiry +
+                        1000
+                }
+            );
+
+        const data =
+            Array.isArray(
+                result?.data
+            )
+                ? result.data
+                : [];
+
+        const candidates =
+            data
+                .map(
+                    (item) => ({
+                        price:
+                            safeNumber(
+                                item?.v
+                            ),
+
+                        timestamp:
+                            safeNumber(
+                                item?.t
+                            )
+                    })
+                )
+                .filter(
+                    (item) =>
+                        item.price !==
+                            null &&
+                        item.timestamp !==
+                            null &&
+                        item.timestamp <=
+                            expiry &&
+                        expiry -
+                            item.timestamp <=
+                            120000
+                )
+                .sort(
+                    (a, b) =>
+                        b.timestamp -
+                        a.timestamp
+                );
+
+        const settlement =
+            candidates[0];
+
+        if (
+            !settlement
+        ) {
+            return;
+        }
+
+        resolveCompletedRound(
+            settlement.price,
+            settlement.timestamp
+        );
+    } catch (error) {
+        console.error(
+            "[ODIN] REST index settlement lookup error:",
+            error.message
+        );
     }
 }
 
-function updateRoundLifecycle() {
+async function updateRoundLifecycle() {
     processSettlementCache();
 
-    resolveExpiredRoundFromIndex();
+    await resolveExpiredRoundFromIndex();
 
     if (
         currentRound &&
@@ -4695,10 +4540,10 @@ function updateRoundLifecycle() {
     }
 }
 
-function updateStateLoop() {
+async function updateStateLoop() {
     updateContractState();
 
-    updateRoundLifecycle();
+    await updateRoundLifecycle();
 
     calculateForecast();
 
@@ -4742,7 +4587,7 @@ async function pollLoop() {
 
         await collectMarketData();
 
-        updateStateLoop();
+        await updateStateLoop();
 
         lastPoll =
             now();
