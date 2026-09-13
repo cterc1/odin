@@ -1017,15 +1017,22 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    const WebSocketCtor =
-        globalThis.WebSocket;
+    let WebSocketCtor;
+
+    try {
+        WebSocketCtor =
+            require("ws");
+    } catch (error) {
+        WebSocketCtor =
+            globalThis.WebSocket;
+    }
 
     if (
         typeof WebSocketCtor !==
         "function"
     ) {
         console.error(
-            "[ODIN] Native WebSocket is unavailable; DCM index feed cannot start."
+            "[ODIN] WebSocket client is unavailable; DCM index feed cannot start."
         );
 
         return;
@@ -1049,34 +1056,84 @@ function connectDCMMarketSocket() {
                 "wss://stream.crypto.com/dcm/v1/market"
             );
 
-        dcmMarketSocket.onopen =
+        dcmMarketSocket.on(
+            "open",
             () => {
                 console.log(
                     "[ODIN] DCM market-data websocket connected"
                 );
 
-                subscribeDCMMarketChannel(
-                    `index.${CONFIG.underlyingIndex}`
+                /*
+                 * Crypto.com recommends a short delay after opening
+                 * the websocket before sending requests. This avoids
+                 * the connection-time rate-limit window.
+                 */
+                setTimeout(
+                    () => {
+                        if (
+                            !dcmMarketSocket ||
+                            dcmMarketSocket.readyState !==
+                                1
+                        ) {
+                            return;
+                        }
+
+                        subscribeDCMMarketChannel(
+                            `index.${CONFIG.underlyingIndex}`
+                        );
+
+                        if (
+                            dcmSubscribedContractSymbol
+                        ) {
+                            subscribeDCMMarketChannel(
+                                `settlement.${dcmSubscribedContractSymbol}`
+                            );
+                        }
+                    },
+                    1000
                 );
+            }
+        );
 
-                if (
-                    dcmSubscribedContractSymbol
-                ) {
-                    subscribeDCMMarketChannel(
-                        `settlement.${dcmSubscribedContractSymbol}`
-                    );
-                }
-            };
-
-        dcmMarketSocket.onmessage =
-            (event) => {
+        dcmMarketSocket.on(
+            "message",
+            (data) => {
                 try {
                     const message =
                         JSON.parse(
-                            String(
-                                event.data
-                            )
+                            data.toString()
                         );
+
+                    /*
+                     * Crypto.com sends public/heartbeat messages on
+                     * market-data sockets. Respond immediately or the
+                     * server can terminate the connection.
+                     */
+                    if (
+                        message?.method ===
+                        "public/heartbeat"
+                    ) {
+                        if (
+                            dcmMarketSocket &&
+                            dcmMarketSocket.readyState ===
+                                1
+                        ) {
+                            dcmMarketSocket.send(
+                                JSON.stringify({
+                                    id:
+                                        String(
+                                            message.id ??
+                                                dcmMarketSocketRequestId++
+                                        ),
+
+                                    method:
+                                        "public/respond-heartbeat"
+                                })
+                            );
+                        }
+
+                        return;
+                    }
 
                     const result =
                         message?.result ||
@@ -1186,9 +1243,11 @@ function connectDCMMarketSocket() {
                         error.message
                     );
                 }
-            };
+            }
+        );
 
-        dcmMarketSocket.onerror =
+        dcmMarketSocket.on(
+            "error",
             (error) => {
                 console.error(
                     "[ODIN] DCM market-data websocket error:",
@@ -1196,19 +1255,22 @@ function connectDCMMarketSocket() {
                         error?.error ||
                         "connection failed"
                 );
-            };
+            }
+        );
 
-        dcmMarketSocket.onclose =
-            () => {
+        dcmMarketSocket.on(
+            "close",
+            (code, reason) => {
                 console.log(
-                    "[ODIN] DCM market-data websocket disconnected"
+                    `[ODIN] DCM market-data websocket disconnected (code=${code ?? "unknown"}, reason=${reason ? reason.toString() : "none"})`
                 );
 
                 dcmMarketSocket =
                     null;
 
                 scheduleDCMMarketSocketReconnect();
-            };
+            }
+        );
     } catch (error) {
         dcmMarketSocket =
             null;
