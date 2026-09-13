@@ -122,6 +122,16 @@ let rawBinaryInstruments = [];
 
 let instrumentRefreshInProgress = false;
 
+/*
+ * Prevent multiple polls from running at the same time.
+ *
+ * Market collection and the DCM instrument refresh can take
+ * longer than one second, so without this lock a new poll
+ * could start before the previous one has finished.
+ */
+
+let pollInProgress = false;
+
 function now() {
     return Date.now();
 }
@@ -925,9 +935,6 @@ function extractStrikePrice(
      *
      * "BITCOIN >73000 (4AM)"
      * "BITCOIN >70000 (4AM)"
-     *
-     * Detect that format explicitly before using a broad
-     * numeric fallback.
      */
 
     const displayName =
@@ -965,9 +972,7 @@ function extractStrikePrice(
 
     /*
      * Final fallback for Strike Option names that contain
-     * a standalone BTC strike value. Ignore small values
-     * and large timestamps so values such as 70000 or 73000
-     * can be recovered safely.
+     * a standalone BTC strike value.
      */
 
     const displayMatches =
@@ -1241,15 +1246,6 @@ async function refreshInstruments() {
             `[ODIN] BTC instruments with detected dollar strikes: ${withDollarStrikes.length}`
         );
 
-        /*
-         * Diagnostic #1:
-         *
-         * BTC is currently not being identified by the
-         * metadata filter. Search the ENTIRE digital-currency
-         * instrument set for BTC/XBT/BITCOIN and print only
-         * compact fields so Render does not truncate the data.
-         */
-
         if (
             digitalCurrencyInstruments.length >
                 0 &&
@@ -1353,21 +1349,79 @@ async function refreshInstruments() {
         instruments =
             btcInstruments;
 
-        currentContract =
-            selectCurrentContract(
-                instruments
-            );
+        /*
+         * IMPORTANT:
+         *
+         * If Odin is already collecting data for a contract,
+         * keep that exact contract instead of selecting a new
+         * strike simply because BTC moved closer to another one.
+         *
+         * This prevents the 3-minute collection period from
+         * constantly restarting.
+         */
+
+        const lockedContractSymbol =
+            currentRound?.symbol;
+
+        const lockedContract =
+            lockedContractSymbol
+                ? instruments.find(
+                      (instrument) =>
+                          instrument.symbol ===
+                          lockedContractSymbol
+                  )
+                : null;
 
         if (
-            currentContract
+            currentRound &&
+            lockedContract
         ) {
+            currentContract = {
+                instrument:
+                    lockedContract,
+
+                expiry:
+                    safeNumber(
+                        lockedContract
+                            .expiry_timestamp_ms
+                    ),
+
+                strike:
+                    extractStrikePrice(
+                        lockedContract
+                    ),
+
+                strikeIndex:
+                    getStrikeIndex(
+                        lockedContract
+                    ),
+
+                operator:
+                    getStrikeOperator(
+                        lockedContract
+                    )
+            };
+
             console.log(
-                `[ODIN] Selected BTC contract: ${currentContract.instrument.symbol}`
+                `[ODIN] Keeping locked paper contract: ${lockedContract.symbol}`
             );
         } else {
-            console.log(
-                "[ODIN] No current BTC Strike contract selected"
-            );
+            currentContract =
+                selectCurrentContract(
+                    instruments
+                );
+
+            if (
+                currentContract
+            ) {
+                console.log(
+                    `[ODIN] Selected BTC contract: ${currentContract.instrument.symbol}`
+                );
+            } else {
+                console.log(
+                    "[ODIN] No current BTC Strike contract selected"
+                );
+            }
         }
 
         if (
@@ -2336,6 +2390,10 @@ function startNewRound() {
     console.log(
         `[ODIN] Started paper round ${id}`
     );
+
+    console.log(
+        `[ODIN] Collecting BTC data for ${CONFIG.collectionSeconds} seconds before prediction`
+    );
 }
 
 function calculateForecast() {
@@ -2398,6 +2456,10 @@ function calculateForecast() {
 
         state.forecast =
             "WAIT";
+
+        console.log(
+            "[ODIN] Forecast waiting: BTC price or strike price unavailable"
+        );
 
         return;
     }
@@ -2531,6 +2593,10 @@ function calculateForecast() {
 
     state.phase =
         "FORECASTING";
+
+    console.log(
+        `[ODIN] PREDICTION MADE | ${state.forecast} | Probability: ${probability.toFixed(2)}% | Score: ${score.toFixed(2)} | BTC: ${state.btcPrice} | Index: ${state.btcIndexPrice} | Strike: ${state.strikePrice}`
+    );
 }
 
 function resolveCurrentContract() {
@@ -2541,6 +2607,90 @@ function resolveCurrentContract() {
             null;
 
         return;
+    }
+
+    /*
+     * Once a paper round exists, keep using that exact
+     * contract until it expires.
+     *
+     * This prevents BTC movement from replacing the
+     * contract every second and resetting the 3-minute
+     * collection period.
+     */
+
+    if (
+        currentRound &&
+        currentRound.symbol
+    ) {
+        const lockedInstrument =
+            instruments.find(
+                (instrument) =>
+                    instrument.symbol ===
+                    currentRound.symbol
+            );
+
+        if (
+            lockedInstrument
+        ) {
+            currentContract = {
+                instrument:
+                    lockedInstrument,
+
+                expiry:
+                    safeNumber(
+                        lockedInstrument
+                            .expiry_timestamp_ms
+                    ),
+
+                strike:
+                    extractStrikePrice(
+                        lockedInstrument
+                    ),
+
+                strikeIndex:
+                    getStrikeIndex(
+                        lockedInstrument
+                    ),
+
+                operator:
+                    getStrikeOperator(
+                        lockedInstrument
+                    )
+            };
+
+            state.contractSymbol =
+                lockedInstrument.symbol ||
+                null;
+
+            state.contractExpiry =
+                safeNumber(
+                    lockedInstrument
+                        .expiry_timestamp_ms
+                );
+
+            state.strikePrice =
+                currentContract.strike;
+
+            state.secondsRemaining =
+                state.contractExpiry !==
+                    null
+                    ? Math.max(
+                          0,
+                          (
+                              state.contractExpiry -
+                              now()
+                          ) /
+                              1000
+                      )
+                    : null;
+
+            state.activeRoundId =
+                createRoundId(
+                    state.contractExpiry
+                );
+
+            return;
+        }
     }
 
     const selected =
@@ -2702,7 +2852,7 @@ function evaluateExpiredRound() {
     }
 
     console.log(
-        `[ODIN] Round ${currentRound.id} resolved: ${result}`
+        `[ODIN] Round ${currentRound.id} resolved: ${result} | Final Index: ${finalPrice} | Strike: ${currentRound.strike}`
     );
 
     currentRound =
@@ -2799,43 +2949,70 @@ function serializeState() {
 }
 
 async function poll() {
-    const currentTime =
-        now();
-
     if (
-        currentTime -
-            lastInstrumentRefresh >=
-        CONFIG.instrumentRefreshMs
+        pollInProgress
     ) {
-        if (
-            !instrumentRefreshInProgress
-        ) {
-            lastInstrumentRefresh =
-                currentTime;
-
-            await refreshInstruments();
-        }
+        return;
     }
 
-    await collectMarketData();
+    pollInProgress =
+        true;
 
-    resolveCurrentContract();
+    try {
+        const currentTime =
+            now();
 
-    await collectContractData();
+        if (
+            currentTime -
+                lastInstrumentRefresh >=
+            CONFIG.instrumentRefreshMs
+        ) {
+            if (
+                !instrumentRefreshInProgress
+            ) {
+                lastInstrumentRefresh =
+                    currentTime;
 
-    calculateStateMetrics();
+                await refreshInstruments();
+            }
+        }
 
-    calculateForecast();
+        await collectMarketData();
 
-    evaluateExpiredRound();
+        resolveCurrentContract();
 
-    state.serverTime =
-        now();
+        await collectContractData();
 
-    io.emit(
-        "odin:update",
-        serializeState()
-    );
+        calculateStateMetrics();
+
+        calculateForecast();
+
+        evaluateExpiredRound();
+
+        state.secondsRemaining =
+            state.contractExpiry !==
+                null
+                ? Math.max(
+                      0,
+                      (
+                          state.contractExpiry -
+                          now()
+                      ) /
+                          1000
+                  )
+                : null;
+
+        state.serverTime =
+            now();
+
+        io.emit(
+            "odin:update",
+            serializeState()
+        );
+    } finally {
+        pollInProgress =
+            false;
+    }
 }
 
 app.get(
