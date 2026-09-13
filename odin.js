@@ -261,7 +261,7 @@ function percentile(
             clean[upper] -
             clean[lower]
         ) *
-            (index - lower)
+        (index - lower)
     );
 }
 
@@ -789,12 +789,36 @@ function isBTCStrikeInstrument(
             instrument
         );
 
+    /*
+     * Strike Options currently expose the
+     * comparison operator in display_name,
+     * for example:
+     *
+     * "BITCOIN >73000 (4AM)"
+     *
+     * The DCM instrument payload may not provide
+     * STRIKE_OPERATOR as a separate field.
+     */
+
+    const displayOperatorMatch =
+        displayName.match(
+            /(?:BITCOIN|BTC)\s*([<>]=?|=)/
+        );
+
+    const detectedOperator =
+        operator ||
+        (
+            displayOperatorMatch
+                ? displayOperatorMatch[1]
+                : null
+        );
+
     return (
-        operator === ">" ||
-        operator === ">=" ||
-        operator === "<" ||
-        operator === "<=" ||
-        operator === "="
+        detectedOperator === ">" ||
+        detectedOperator === ">=" ||
+        detectedOperator === "<" ||
+        detectedOperator === "<=" ||
+        detectedOperator === "="
     );
 }
 
@@ -840,7 +864,7 @@ function extractStrikePrice(
 
         if (
             value !==
-            null &&
+                null &&
             value > 0
         ) {
             return value;
@@ -1003,7 +1027,7 @@ function selectCurrentContract(
 
     const btcPrice =
         state.btcIndexPrice !==
-            null
+        null
             ? state.btcIndexPrice
             : state.btcPrice;
 
@@ -2459,7 +2483,7 @@ function resolveCurrentContract() {
 
     if (
         previousSymbol !==
-            instrument.symbol
+        instrument.symbol
     ) {
         console.log(
             `[ODIN] Active contract changed: ${instrument.symbol}`
