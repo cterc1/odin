@@ -992,7 +992,14 @@ async function getBTCBook() {
             }
         );
 
-    return result;
+    /*
+     * Crypto.com REST returns the book inside result.data[0].
+     * Do not pass the wrapper object into the book calculator.
+     */
+    return (
+        result?.data?.[0] ||
+        null
+    );
 }
 
 async function getBTCTrades() {
@@ -3291,7 +3298,7 @@ async function collectContractData() {
             state.marketProbability =
                 clamp(
                     state.contractMid *
-                        10,
+                        100,
                     0,
                     100
                 );
@@ -3304,7 +3311,7 @@ async function collectContractData() {
                 null
                     ? clamp(
                           ticker.last *
-                              10,
+                              100,
                           0,
                           100
                       )

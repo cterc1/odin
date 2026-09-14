@@ -1524,7 +1524,7 @@
             const forecast =
                 String(
                     data.forecast ||
-                    "WAIT"
+                    "PASS"
                 ).toUpperCase();
 
             elements.predictionCall.textContent =
@@ -2410,7 +2410,7 @@
             );
 
             socket.on(
-                "state",
+                "odin:update",
                 data => {
                     handleUpdate(
                         data
@@ -2423,7 +2423,7 @@
             try {
                 const response =
                     await fetch(
-                        "/api/state",
+                        "/api/status",
                         {
                             cache: "no-store"
                         }
