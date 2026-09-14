@@ -1017,209 +1017,8 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    const WebSocketCtor =
-        globalThis.WebSocket;
-
-    if (
-        typeof WebSocketCtor !==
-        "function"
-    ) {
-        console.error(
-            "[ODIN] Native WebSocket is unavailable; DCM index feed cannot start."
-        );
-
-        return;
-    }
-
-    if (
-        dcmMarketSocket &&
-        (
-            dcmMarketSocket.readyState ===
-                0 ||
-            dcmMarketSocket.readyState ===
-                1
-        )
-    ) {
-        return;
-    }
-
-    try {
-        dcmMarketSocket =
-            new WebSocketCtor(
-                "wss://stream.crypto.com/dcm/v1/market"
-            );
-
-        dcmMarketSocket.onopen =
-            () => {
-                console.log(
-                    "[ODIN] DCM market-data websocket connected"
-                );
-
-                subscribeDCMMarketChannel(
-                    `index.${CONFIG.underlyingIndex}`
-                );
-
-                if (
-                    dcmSubscribedContractSymbol
-                ) {
-                    subscribeDCMMarketChannel(
-                        `settlement.${dcmSubscribedContractSymbol}`
-                    );
-                }
-            };
-
-        dcmMarketSocket.onmessage =
-            (event) => {
-                try {
-                    const message =
-                        JSON.parse(
-                            String(
-                                event.data
-                            )
-                        );
-
-                    const result =
-                        message?.result ||
-                        {};
-
-                    if (
-                        Number(message?.code) !== 0 &&
-                        message?.method ===
-                            "subscribe"
-                    ) {
-                        console.error(
-                            "[ODIN] DCM subscription rejected:",
-                            JSON.stringify(
-                                message
-                            )
-                        );
-                    }
-
-                    const channel =
-                        String(
-                            result.channel ||
-                                result.subscription ||
-                                ""
-                        );
-
-                    const data =
-                        Array.isArray(
-                            result.data
-                        )
-                            ? result.data
-                            : [];
-
-                    const item =
-                        data.length
-                            ? data[
-                                  data.length -
-                                      1
-                              ]
-                            : null;
-
-                    if (
-                        channel.startsWith(
-                            "index."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmIndexCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now()
-                            };
-                        }
-                    }
-
-                    if (
-                        channel.startsWith(
-                            "settlement."
-                        ) &&
-                        item
-                    ) {
-                        const price =
-                            safeNumber(
-                                item.v
-                            );
-
-                        const timestamp =
-                            safeNumber(
-                                item.t
-                            );
-
-                        if (
-                            price !==
-                            null
-                        ) {
-                            dcmSettlementCache = {
-                                price,
-
-                                timestamp:
-                                    timestamp ||
-                                    now(),
-
-                                symbol:
-                                    result.instrument_name ||
-                                    dcmSubscribedContractSymbol
-                            };
-                        }
-                    }
-                } catch (error) {
-                    console.error(
-                        "[ODIN] DCM market-data message error:",
-                        error.message
-                    );
-                }
-            };
-
-        dcmMarketSocket.onerror =
-            (error) => {
-                console.error(
-                    "[ODIN] DCM market-data websocket error:",
-                    error?.message ||
-                        error?.error ||
-                        "connection failed"
-                );
-            };
-
-        dcmMarketSocket.onclose =
-            () => {
-                console.log(
-                    "[ODIN] DCM market-data websocket disconnected"
-                );
-
-                dcmMarketSocket =
-                    null;
-
-                scheduleDCMMarketSocketReconnect();
-            };
-    } catch (error) {
-        dcmMarketSocket =
-            null;
-
-        console.error(
-            "[ODIN] DCM market-data websocket connection error:",
-            error.message
-        );
-
-        scheduleDCMMarketSocketReconnect();
-    }
+    dcmMarketSocket = null;
+    return;
 }
 
 async function getBTCIndex() {
@@ -2196,134 +1995,47 @@ function isAboveStrikeContract(
     );
 }
 
-function selectCurrentContract(
-    candidates
-) {
-    const currentTime =
-        now();
+function selectCurrentContract(candidates) {
+    const now = Date.now();
 
-    const valid =
-        candidates.filter(
-            (
-                instrument
-            ) =>
-                instrument &&
-                instrument.tradable !==
-                    false &&
-                isFifteenMinuteStrikeInstrument(
-                    instrument
-                ) &&
-                isAboveStrikeContract(
-                    instrument
-                ) &&
-                safeNumber(
-                    instrument.expiry_timestamp_ms
-                ) !== null &&
-                safeNumber(
-                    instrument.expiry_timestamp_ms
-                ) >
-                    currentTime
-        )
-        .map(
-            (
-                instrument
-            ) => ({
-                instrument,
-
-                expiry:
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ),
-
-                strike:
-                    extractStrikePrice(
-                        instrument
-                    ),
-
-                strikeIndex:
-                    getStrikeIndex(
-                        instrument
-                    ),
-
-                operator:
-                    getStrikeOperator(
-                        instrument
-                    )
-            })
-        );
+    const valid = (candidates || [])
+        .filter(contract => contract && contract.expiryTimestamp)
+        .filter(contract => Number(contract.expiryTimestamp) > now)
+        .filter(contract => isFifteenMinuteStrikeInstrument(contract));
 
     if (!valid.length) {
         return null;
     }
 
-    const btcPrice =
-        state.btcIndexPrice !==
-        null
-            ? state.btcIndexPrice
-            : state.btcPrice;
+    const nearestExpiry = Math.min(
+        ...valid.map(contract => Number(contract.expiryTimestamp))
+    );
 
-    const withStrikes =
-        valid.filter(
-            (item) =>
-                item.strike !==
-                null
-        );
+    const sameExpiry = valid.filter(contract =>
+        Number(contract.expiryTimestamp) === nearestExpiry
+    );
 
-    let selected = null;
+    const referencePrice = safeNumber(
+        state.btcIndexPrice ?? state.btcPrice
+    );
 
-    if (
-        btcPrice !== null &&
-        withStrikes.length
-    ) {
-        selected =
-            withStrikes.sort(
-                (
-                    a,
-                    b
-                ) => {
-                    const aDistance =
-                        Math.abs(
-                            a.strike -
-                                btcPrice
-                        );
+    sameExpiry.sort((a, b) => {
+        const aStrike = safeNumber(a.strike);
+        const bStrike = safeNumber(b.strike);
 
-                    const bDistance =
-                        Math.abs(
-                            b.strike -
-                                btcPrice
-                        );
+        if (referencePrice !== null && aStrike !== null && bStrike !== null) {
+            const distanceA = Math.abs(aStrike - referencePrice);
+            const distanceB = Math.abs(bStrike - referencePrice);
 
-                    if (
-                        aDistance !==
-                        bDistance
-                    ) {
-                        return (
-                            aDistance -
-                            bDistance
-                        );
-                    }
+            if (distanceA !== distanceB) {
+                return distanceA - distanceB;
+            }
+        }
 
-                    return (
-                        a.expiry -
-                        b.expiry
-                    );
-                }
-            )[0];
-    }
+        return String(a.symbol || '').localeCompare(String(b.symbol || ''));
+    });
 
-    if (!selected) {
-        selected =
-            valid.sort(
-                (
-                    a,
-                    b
-                ) =>
-                    a.expiry -
-                    b.expiry
-            )[0];
-    }
-
-    return selected;
+    return sameExpiry[0] || null;
 }
 
 async function refreshInstruments() {
