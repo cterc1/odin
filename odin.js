@@ -1017,19 +1017,210 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
-    /*
-     * The DCM market websocket currently rejects this deployment's
-     * handshake. Odin is paper-only, so use the documented REST BTC
-     * index fallback instead of repeatedly reconnecting to a failed
-     * websocket.
-     */
-    dcmMarketSocket =
-        null;
+    const WebSocketCtor =
+        globalThis.WebSocket;
 
-    dcmSubscribedContractSymbol =
-        null;
+    if (
+        typeof WebSocketCtor !==
+        "function"
+    ) {
+        console.error(
+            "[ODIN] Native WebSocket is unavailable; DCM index feed cannot start."
+        );
+
+        return;
+    }
+
+    if (
+        dcmMarketSocket &&
+        (
+            dcmMarketSocket.readyState ===
+                0 ||
+            dcmMarketSocket.readyState ===
+                1
+        )
+    ) {
+        return;
+    }
+
+    try {
+        dcmMarketSocket =
+            new WebSocketCtor(
+                "wss://stream.crypto.com/dcm/v1/market"
+            );
+
+        dcmMarketSocket.onopen =
+            () => {
+                console.log(
+                    "[ODIN] DCM market-data websocket connected"
+                );
+
+                subscribeDCMMarketChannel(
+                    `index.${CONFIG.underlyingIndex}`
+                );
+
+                if (
+                    dcmSubscribedContractSymbol
+                ) {
+                    subscribeDCMMarketChannel(
+                        `settlement.${dcmSubscribedContractSymbol}`
+                    );
+                }
+            };
+
+        dcmMarketSocket.onmessage =
+            (event) => {
+                try {
+                    const message =
+                        JSON.parse(
+                            String(
+                                event.data
+                            )
+                        );
+
+                    const result =
+                        message?.result ||
+                        {};
+
+                    if (
+                        Number(message?.code) !== 0 &&
+                        message?.method ===
+                            "subscribe"
+                    ) {
+                        console.error(
+                            "[ODIN] DCM subscription rejected:",
+                            JSON.stringify(
+                                message
+                            )
+                        );
+                    }
+
+                    const channel =
+                        String(
+                            result.channel ||
+                                result.subscription ||
+                                ""
+                        );
+
+                    const data =
+                        Array.isArray(
+                            result.data
+                        )
+                            ? result.data
+                            : [];
+
+                    const item =
+                        data.length
+                            ? data[
+                                  data.length -
+                                      1
+                              ]
+                            : null;
+
+                    if (
+                        channel.startsWith(
+                            "index."
+                        ) &&
+                        item
+                    ) {
+                        const price =
+                            safeNumber(
+                                item.v
+                            );
+
+                        const timestamp =
+                            safeNumber(
+                                item.t
+                            );
+
+                        if (
+                            price !==
+                            null
+                        ) {
+                            dcmIndexCache = {
+                                price,
+
+                                timestamp:
+                                    timestamp ||
+                                    now()
+                            };
+                        }
+                    }
+
+                    if (
+                        channel.startsWith(
+                            "settlement."
+                        ) &&
+                        item
+                    ) {
+                        const price =
+                            safeNumber(
+                                item.v
+                            );
+
+                        const timestamp =
+                            safeNumber(
+                                item.t
+                            );
+
+                        if (
+                            price !==
+                            null
+                        ) {
+                            dcmSettlementCache = {
+                                price,
+
+                                timestamp:
+                                    timestamp ||
+                                    now(),
+
+                                symbol:
+                                    result.instrument_name ||
+                                    dcmSubscribedContractSymbol
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.error(
+                        "[ODIN] DCM market-data message error:",
+                        error.message
+                    );
+                }
+            };
+
+        dcmMarketSocket.onerror =
+            (error) => {
+                console.error(
+                    "[ODIN] DCM market-data websocket error:",
+                    error?.message ||
+                        error?.error ||
+                        "connection failed"
+                );
+            };
+
+        dcmMarketSocket.onclose =
+            () => {
+                console.log(
+                    "[ODIN] DCM market-data websocket disconnected"
+                );
+
+                dcmMarketSocket =
+                    null;
+
+                scheduleDCMMarketSocketReconnect();
+            };
+    } catch (error) {
+        dcmMarketSocket =
+            null;
+
+        console.error(
+            "[ODIN] DCM market-data websocket connection error:",
+            error.message
+        );
+
+        scheduleDCMMarketSocketReconnect();
+    }
 }
-
 
 async function getBTCIndex() {
     /*
@@ -2012,80 +2203,58 @@ function selectCurrentContract(
         now();
 
     const valid =
-        candidates
-            .filter(
-                (
+        candidates.filter(
+            (
+                instrument
+            ) =>
+                instrument &&
+                instrument.tradable !==
+                    false &&
+                isFifteenMinuteStrikeInstrument(
                     instrument
-                ) =>
-                    instrument &&
-                    instrument.tradable !==
-                        false &&
-                    isFifteenMinuteStrikeInstrument(
-                        instrument
-                    ) &&
-                    isAboveStrikeContract(
-                        instrument
-                    ) &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) !== null &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) >
-                        currentTime
-            )
-            .map(
-                (
+                ) &&
+                isAboveStrikeContract(
                     instrument
-                ) => ({
-                    instrument,
-                    expiry:
-                        safeNumber(
-                            instrument.expiry_timestamp_ms
-                        ),
-                    strike:
-                        extractStrikePrice(
-                            instrument
-                        ),
-                    strikeIndex:
-                        getStrikeIndex(
-                            instrument
-                        ),
-                    operator:
-                        getStrikeOperator(
-                            instrument
-                        )
-                })
-            );
+                ) &&
+                safeNumber(
+                    instrument.expiry_timestamp_ms
+                ) !== null &&
+                safeNumber(
+                    instrument.expiry_timestamp_ms
+                ) >
+                    currentTime
+        )
+        .map(
+            (
+                instrument
+            ) => ({
+                instrument,
 
-    if (
-        !valid.length
-    ) {
+                expiry:
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ),
+
+                strike:
+                    extractStrikePrice(
+                        instrument
+                    ),
+
+                strikeIndex:
+                    getStrikeIndex(
+                        instrument
+                    ),
+
+                operator:
+                    getStrikeOperator(
+                        instrument
+                    )
+            })
+        );
+
+    if (!valid.length) {
         return null;
     }
-
-    /*
-     * A 15-minute Strike market is one expiry window.
-     * Always select the nearest upcoming expiry first.
-     * Only after that do we choose the strike closest to BTC.
-     *
-     * This prevents Odin from selecting a later 15-minute market
-     * simply because that later market has a closer strike.
-     */
-    const earliestExpiry =
-        Math.min(
-            ...valid.map(
-                item =>
-                    item.expiry
-            )
-        );
-
-    const currentMarket =
-        valid.filter(
-            item =>
-                item.expiry ===
-                earliestExpiry
-        );
 
     const btcPrice =
         state.btcIndexPrice !==
@@ -2094,67 +2263,68 @@ function selectCurrentContract(
             : state.btcPrice;
 
     const withStrikes =
-        currentMarket.filter(
-            item =>
+        valid.filter(
+            (item) =>
                 item.strike !==
                 null
         );
+
+    let selected = null;
 
     if (
         btcPrice !== null &&
         withStrikes.length
     ) {
-        return withStrikes.sort(
-            (
-                a,
-                b
-            ) => {
-                const aDistance =
-                    Math.abs(
-                        a.strike -
-                            btcPrice
-                    );
+        selected =
+            withStrikes.sort(
+                (
+                    a,
+                    b
+                ) => {
+                    const aDistance =
+                        Math.abs(
+                            a.strike -
+                                btcPrice
+                        );
 
-                const bDistance =
-                    Math.abs(
-                        b.strike -
-                            btcPrice
-                    );
+                    const bDistance =
+                        Math.abs(
+                            b.strike -
+                                btcPrice
+                        );
 
-                if (
-                    aDistance !==
-                    bDistance
-                ) {
-                    return (
-                        aDistance -
+                    if (
+                        aDistance !==
                         bDistance
+                    ) {
+                        return (
+                            aDistance -
+                            bDistance
+                        );
+                    }
+
+                    return (
+                        a.expiry -
+                        b.expiry
                     );
                 }
-
-                return (
-                    a.strikeIndex -
-                    b.strikeIndex
-                );
-            }
-        )[0];
+            )[0];
     }
 
-    return currentMarket.sort(
-        (
-            a,
-            b
-        ) =>
-            (
-                a.strikeIndex ??
-                Number.MAX_SAFE_INTEGER
-            ) -
-            (
-                b.strikeIndex ??
-                Number.MAX_SAFE_INTEGER
-            )
-    )[0];
-}
+    if (!selected) {
+        selected =
+            valid.sort(
+                (
+                    a,
+                    b
+                ) =>
+                    a.expiry -
+                    b.expiry
+            )[0];
+    }
 
+    return selected;
+}
 
 async function refreshInstruments() {
     if (
