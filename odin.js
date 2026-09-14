@@ -1,5 +1,4 @@
 const path = require("path");
-const fs = require("fs");
 const http = require("http");
 const express = require("express");
 const cors = require("cors");
@@ -22,19 +21,39 @@ const CRYPTO_DCM_API =
 
 const CONFIG = {
     underlying: "BTC",
-    underlyingIndex: "BTCUSD-INDEX@CdnaFunded",
-    fallbackUnderlyingIndex: "BTCUSD-INDEX",
-    underlyingPerp: "BTCUSD-PERP",
-
-    collectionSeconds: 180,
-
-    pollIntervalMs: 1000,
 
     /*
-     * DCM has 32,000+ BINARY_OPTION instruments.
-     * Keep the instrument cache and refresh it once per minute.
+     * Strike Options use Crypto.com's CDNA-funded
+     * BTC index as their underlying.
+     *
+     * The generic exchange BTC index is kept only
+     * as a fallback if the DCM market feed is unavailable.
      */
-    instrumentRefreshMs: 60000,
+    underlyingIndex:
+        "BTCUSD-INDEX@CdnaFunded",
+
+    fallbackUnderlyingIndex:
+        "BTCUSD-INDEX",
+
+    underlyingPerp:
+        "BTCUSD-PERP",
+
+    collectionSeconds:
+        180,
+
+    pollIntervalMs:
+        1000,
+
+    instrumentRefreshMs:
+        60000,
+
+    dataHealthIntervalMs:
+        15000,
+
+    targetStrikeDurationMs:
+        20 *
+        60 *
+        1000,
 
     contractSelectionHorizonMs:
         14 *
@@ -43,105 +62,192 @@ const CONFIG = {
         60 *
         1000,
 
-    roundDurationMs:
-        15 *
-        60 *
-        1000,
+    maxPriceHistory:
+        900,
 
-    forecastStabilityRequired: 3,
+    maxTradeHistory:
+        900,
 
-    minimumForecastConfidence: 8,
+    maxOrderBookHistory:
+        300,
 
-    minimumDataQuality: 85,
-
-    minimumForecastSignals: 1,
-
-    maxIndexAgeMs: 5000,
+    forecastHistoryLimit:
+        500,
 
     /*
-     * Official paper W/L accounting begins after the current
-     * update/testing day. Everything before this date remains
-     * available as round history but is not added to the official
-     * daily W/L record.
+     * PAPER FORECAST LOCK
      */
-    officialRecordStartDate: "2026-09-13",
 
-    dailyResetHourET: 23,
-    dailyResetMinuteET: 59,
+    forecastStabilityRequired:
+        3,
 
-    maxPriceHistory: 900,
-    maxTradeHistory: 900,
-    maxOrderBookHistory: 300,
+    minimumForecastConfidence:
+        8,
 
-    forecastHistoryLimit: 500
+    /*
+     * Market/index integrity safeguards.
+     */
+
+    maxIndexAgeMs:
+        10000,
+
+    maxIndexPerpDifferencePct:
+        1.5
 };
 
 let state = {
     connected: false,
 
-    serverTime: Date.now(),
+    serverTime:
+        Date.now(),
 
     btcPrice: null,
+
     btcIndexPrice: null,
-    btcIndexTimestamp: null,
-    btcIndexSource: null,
-    btcIndexStale: false,
-    btcIndexAgeMs: null,
 
-    strikePrice: null,
-    strikeDistance: null,
-    strikeDistancePct: null,
+    btcIndexTimestamp:
+        null,
 
-    contractSymbol: null,
-    contractExpiry: null,
-    secondsRemaining: null,
+    btcIndexSource:
+        null,
 
-    contractBid: null,
-    contractAsk: null,
-    contractMid: null,
+    btcIndexStale:
+        false,
 
-    marketProbability: null,
+    strikePrice:
+        null,
 
-    phase: "WAITING",
+    strikeDistance:
+        null,
 
-    forecast: "WAIT",
-    forecastProbability: null,
-    forecastConfidence: null,
-    forecastReason: null,
+    strikeDistancePct:
+        null,
 
-    modelScore: 0,
+    contractSymbol:
+        null,
 
-    momentum1m: null,
-    momentum3m: null,
-    momentum5m: null,
+    contractExpiry:
+        null,
 
-    volatility1m: null,
-    volatility3m: null,
+    secondsRemaining:
+        null,
 
-    velocity: null,
-    acceleration: null,
+    contractBid:
+        null,
 
-    orderBookImbalance: null,
-    tradeFlow: null,
+    contractAsk:
+        null,
 
-    vwap: null,
+    contractMid:
+        null,
 
-    distanceZScore: null,
+    marketProbability:
+        null,
 
-    dataQuality: 0,
+    phase:
+        "WAITING",
 
-    lastUpdate: null,
+    forecast:
+        "WAIT",
 
-    collectionStartedAt: null,
+    forecastProbability:
+        null,
 
-    activeRoundId: null,
+    forecastConfidence:
+        null,
 
-    recordDate: null,
-    officialRecordEligible: false,
-    dailyWins: 0,
-    dailyLosses: 0,
-    dailyAccuracy: null,
-    dailyRecords: {}
+    modelScore:
+        0,
+
+    momentum1m:
+        null,
+
+    momentum3m:
+        null,
+
+    momentum5m:
+        null,
+
+    volatility1m:
+        null,
+
+    volatility3m:
+        null,
+
+    velocity:
+        null,
+
+    acceleration:
+        null,
+
+    orderBookImbalance:
+        null,
+
+    tradeFlow:
+        null,
+
+    vwap:
+        null,
+
+    distanceZScore:
+        null,
+
+    dataQuality:
+        0,
+
+    lastUpdate:
+        null,
+
+    collectionStartedAt:
+        null,
+
+    activeRoundId:
+        null,
+
+    /*
+     * PAPER LOCK STATE
+     */
+
+    forecastLocked:
+        false,
+
+    lockedForecast:
+        null,
+
+    lockedProbability:
+        null,
+
+    lockedConfidence:
+        null,
+
+    lockedAt:
+        null,
+
+    lockedContractSymbol:
+        null,
+
+    lockedContractExpiry:
+        null,
+
+    /*
+     * Data-integrity warning only.
+     */
+
+    paperEmergency:
+        false,
+
+    paperEmergencyReason:
+        null,
+
+    dataSourceHealth: {
+        dcmInstruments: false,
+        btcIndex: false,
+        btcPerp: false,
+        btcBook: false,
+        btcTrades: false,
+        verifiedStrikeContract: false,
+        lastCheckedAt: null
+    }
 };
 
 const priceHistory = [];
@@ -150,542 +256,82 @@ const orderBookHistory = [];
 
 const completedRounds = [];
 
-const DATA_DIR =
-    process.env.ODIN_DATA_DIR
-        ? path.resolve(
-              process.env.ODIN_DATA_DIR
-          )
-        : path.join(
-              __dirname,
-              "data"
-          );
-
-const ROUND_HISTORY_FILE =
-    path.join(
-        DATA_DIR,
-        "odin_round_history.json"
-    );
-
-const DAILY_RECORD_FILE =
-    path.join(
-        DATA_DIR,
-        "odin_daily_records.json"
-    );
-
-let dailyRecords = {};
-
 let instruments = [];
-let currentContract = null;
-
-let lastInstrumentRefresh = 0;
-let lastPoll = 0;
-let instrumentRefreshInProgress = false;
-let pollInProgress = false;
-
-let previousVelocity = null;
-let previousPrice = null;
-
-let currentRound = null;
-
-let lastNoContractLog = 0;
-
-let rawBinaryInstruments = [];
-
-let dcmMarketSocket = null;
-let dcmMarketSocketRetryTimer = null;
-let dcmMarketSocketRequestId = 1;
-let dcmIndexCache = null;
-let dcmSettlementCache = null;
-let dcmSubscribedContractSymbol = null;
-
-function getEasternDateKey(timestamp = now()) {
-    const parts = new Intl.DateTimeFormat(
-        "en-US",
-        {
-            timeZone: "America/New_York",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit"
-        }
-    ).formatToParts(
-        new Date(timestamp)
-    );
-
-    const values = {};
-
-    for (const part of parts) {
-        values[part.type] =
-            part.value;
-    }
-
-    return `${values.year}-${values.month}-${values.day}`;
-}
-
-function getEasternTimeParts(timestamp = now()) {
-    const parts = new Intl.DateTimeFormat(
-        "en-US",
-        {
-            timeZone: "America/New_York",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false
-        }
-    ).formatToParts(
-        new Date(timestamp)
-    );
-
-    const values = {};
-
-    for (const part of parts) {
-        values[part.type] =
-            part.value;
-    }
-
-    return {
-        hour: Number(
-            values.hour
-        ),
-        minute: Number(
-            values.minute
-        )
-    };
-}
-
-function getDailyDisplayDateKey() {
-    const time =
-        getEasternTimeParts();
-
-    if (
-        time.hour ===
-            CONFIG.dailyResetHourET &&
-        time.minute >=
-            CONFIG.dailyResetMinuteET
-    ) {
-        return getEasternDateKey(
-            now() +
-                60 *
-                1000
-        );
-    }
-
-    return getEasternDateKey();
-}
-
-function isOfficialRecordDate(
-    dateKey = getEasternDateKey()
-) {
-    return (
-        dateKey >=
-        CONFIG.officialRecordStartDate
-    );
-}
-
-function ensureDataDirectory() {
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(
-            DATA_DIR,
-            { recursive: true }
-        );
-    }
-}
-
-function rebuildDailyRecordsFromHistory() {
-    const reconstructed = {};
-
-    for (const round of completedRounds) {
-        if (
-            !round ||
-            (round.result !== "WIN" &&
-                round.result !== "LOSS") ||
-            round.officialRecordCounted !== true
-        ) {
-            continue;
-        }
-
-        const dateKey =
-            getEasternDateKey(
-                round.resolvedAt ||
-                    round.expiry ||
-                    now()
-            );
-
-        if (!isOfficialRecordDate(dateKey)) {
-            continue;
-        }
-
-        if (!reconstructed[dateKey]) {
-            reconstructed[dateKey] = {
-                wins: 0,
-                losses: 0,
-                total: 0,
-                closed: 0
-            };
-        }
-
-        reconstructed[dateKey].total += 1;
-        reconstructed[dateKey].closed += 1;
-
-        if (round.result === "WIN") {
-            reconstructed[dateKey].wins += 1;
-        } else {
-            reconstructed[dateKey].losses += 1;
-        }
-    }
-
-    for (
-        const [
-            dateKey,
-            record
-        ] of Object.entries(
-            reconstructed
-        )
-    ) {
-        const existing =
-            dailyRecords[dateKey] &&
-            typeof dailyRecords[dateKey] ===
-                "object"
-                ? dailyRecords[dateKey]
-                : null;
-
-        if (!existing) {
-            dailyRecords[dateKey] =
-                record;
-
-            continue;
-        }
-
-        dailyRecords[dateKey] = {
-            wins: Math.max(
-                Number(existing.wins) || 0,
-                record.wins
-            ),
-
-            losses: Math.max(
-                Number(existing.losses) || 0,
-                record.losses
-            ),
-
-            total: Math.max(
-                Number(existing.total) || 0,
-                record.total
-            ),
-
-            closed: Math.max(
-                Number(existing.closed) || 0,
-                record.closed
-            )
-        };
-    }
-}
-
-function persistJsonFile(
-    filePath,
-    value
-) {
-    const tempPath =
-        `${filePath}.tmp`;
-
-    fs.writeFileSync(
-        tempPath,
-        JSON.stringify(
-            value,
-            null,
-            2
-        ),
-        "utf8"
-    );
-
-    fs.renameSync(
-        tempPath,
-        filePath
-    );
-}
-
-function loadPersistentRecords() {
-    ensureDataDirectory();
-
-    try {
-        if (
-            fs.existsSync(
-                ROUND_HISTORY_FILE
-            )
-        ) {
-            const parsed =
-                JSON.parse(
-                    fs.readFileSync(
-                        ROUND_HISTORY_FILE,
-                        "utf8"
-                    )
-                );
-
-            if (
-                Array.isArray(parsed)
-            ) {
-                for (
-                    const round of
-                        parsed
-                ) {
-                    if (
-                        round &&
-                        round.id &&
-                        !completedRounds.some(
-                            (item) =>
-                                item.id ===
-                                round.id
-                        )
-                    ) {
-                        completedRounds.push(
-                            round
-                        );
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error(
-            "[ODIN] Round history load error:",
-            error.message
-        );
-    }
-
-    try {
-        if (
-            fs.existsSync(
-                DAILY_RECORD_FILE
-            )
-        ) {
-            const parsed =
-                JSON.parse(
-                    fs.readFileSync(
-                        DAILY_RECORD_FILE,
-                        "utf8"
-                    )
-                );
-
-            if (
-                parsed &&
-                typeof parsed ===
-                    "object"
-            ) {
-                dailyRecords =
-                    parsed;
-            }
-        }
-    } catch (error) {
-        console.error(
-            "[ODIN] Daily record load error:",
-            error.message
-        );
-    }
-
-    rebuildDailyRecordsFromHistory();
-
-    while (
-        completedRounds.length >
-        CONFIG.forecastHistoryLimit
-    ) {
-        completedRounds.shift();
-    }
-}
-
-function savePersistentRecords() {
-    try {
-        ensureDataDirectory();
-
-        persistJsonFile(
-            ROUND_HISTORY_FILE,
-            completedRounds
-        );
-
-        persistJsonFile(
-            DAILY_RECORD_FILE,
-            dailyRecords
-        );
-    } catch (error) {
-        console.error(
-            "[ODIN] Persistent record save error:",
-            error.message
-        );
-    }
-}
-
-function getDailyRecord(
-    dateKey = getEasternDateKey()
-) {
-    const record =
-        dailyRecords[dateKey];
-
-    if (
-        record &&
-        typeof record ===
-            "object"
-    ) {
-        return {
-            wins: Number(
-                record.wins
-            ) || 0,
-
-            losses: Number(
-                record.losses
-            ) || 0,
-
-            total: Number(
-                record.total
-            ) || 0,
-
-            closed: Number(
-                record.closed
-            ) || 0
-        };
-    }
-
-    return {
-        wins: 0,
-        losses: 0,
-        total: 0,
-        closed: 0
-    };
-}
-
-function updateDailyState() {
-    const dateKey =
-        getDailyDisplayDateKey();
-
-    const eligible =
-        isOfficialRecordDate(
-            dateKey
-        );
-
-    const record =
-        eligible
-            ? getDailyRecord(
-                  dateKey
-              )
-            : {
-                  wins: 0,
-                  losses: 0,
-                  total: 0,
-                  closed: 0
-              };
-
-    state.recordDate =
-        dateKey;
-
-    state.officialRecordEligible =
-        eligible;
-
-    state.dailyWins =
-        record.wins;
-
-    state.dailyLosses =
-        record.losses;
-
-    state.dailyAccuracy =
-        record.total > 0
-            ? (
-                  record.wins /
-                  record.total
-              ) *
-              100
-            : null;
-
-    state.dailyRecords =
-        dailyRecords;
-}
-
-function recordOfficialResult(
-    round
-) {
-    if (
-        !round ||
-        (round.result !==
-            "WIN" &&
-            round.result !==
-                "LOSS")
-    ) {
-        return false;
-    }
-
-    const dateKey =
-        getEasternDateKey(
-            round.resolvedAt ||
-                now()
-        );
-
-    if (
-        !isOfficialRecordDate(
-            dateKey
-        )
-    ) {
-        round.officialRecordCounted =
-            false;
-
-        return false;
-    }
-
-    const record =
-        getDailyRecord(
-            dateKey
-        );
-
-    if (
-        round.officialRecordCounted ===
-            true
-    ) {
-        return false;
-    }
-
-    record.total += 1;
-    record.closed += 1;
-
-    if (
-        round.result ===
-        "WIN"
-    ) {
-        record.wins += 1;
-    } else {
-        record.losses += 1;
-    }
-
-    dailyRecords[dateKey] =
-        record;
-
-    round.officialRecordCounted =
-        true;
-
-    savePersistentRecords();
-
-    return true;
-}
-
-function resetDailyDisplayIfNeeded() {
-    const time =
-        getEasternTimeParts();
-
-    /*
-     * The live daily panel is date-keyed, so it naturally starts
-     * at 0-0 on the new ET date. This check also makes the 11:59 PM
-     * reset explicit in the server state without deleting history.
-     */
-    if (
-        time.hour ===
-            CONFIG.dailyResetHourET &&
-        time.minute ===
-            CONFIG.dailyResetMinuteET
-    ) {
-        updateDailyState();
-    }
-}
+
+let currentContract =
+    null;
+
+let lastInstrumentRefresh =
+    0;
+
+let lastPoll =
+    0;
+
+let previousVelocity =
+    null;
+
+let previousPrice =
+    null;
+
+let currentRound =
+    null;
+
+let lastNoContractLog =
+    0;
+
+let rawBinaryInstruments =
+    [];
+
+let instrumentRefreshInProgress =
+    false;
+
+let pollInProgress =
+    false;
+
+let lastDataHealthCheck =
+    0;
+
+/*
+ * DCM market-data WebSocket state.
+ *
+ * This lets Odin prefer the exact DCM/CDNA-funded
+ * Strike Options index instead of assuming the generic
+ * exchange index is identical to the Strike settlement index.
+ */
+
+let dcmMarketSocket =
+    null;
+
+let dcmMarketSocketRetryTimer =
+    null;
+
+let dcmMarketSocketRequestId =
+    1;
+
+let dcmIndexCache =
+    null;
+
+let dcmSettlementCache =
+    null;
+
+let dcmSubscribedContractSymbol =
+    null;
 
 function now() {
     return Date.now();
 }
 
-function safeNumber(value) {
+function safeNumber(
+    value
+) {
     const number =
         Number(value);
 
-    if (!Number.isFinite(number)) {
+    if (
+        !Number.isFinite(
+            number
+        )
+    ) {
         return null;
     }
 
@@ -706,13 +352,17 @@ function clamp(
     );
 }
 
-function average(values) {
+function average(
+    values
+) {
     const clean =
         values.filter(
             Number.isFinite
         );
 
-    if (!clean.length) {
+    if (
+        !clean.length
+    ) {
         return null;
     }
 
@@ -734,7 +384,9 @@ function standardDeviation(
             Number.isFinite
         );
 
-    if (clean.length < 2) {
+    if (
+        clean.length < 2
+    ) {
         return null;
     }
 
@@ -770,12 +422,17 @@ function standardDeviation(
 function weightedAverage(
     items
 ) {
-    if (!items.length) {
+    if (
+        !items.length
+    ) {
         return null;
     }
 
-    let numerator = 0;
-    let denominator = 0;
+    let numerator =
+        0;
+
+    let denominator =
+        0;
 
     for (
         const item of items
@@ -806,7 +463,9 @@ function weightedAverage(
             weight;
     }
 
-    if (!denominator) {
+    if (
+        !denominator
+    ) {
         return null;
     }
 
@@ -830,12 +489,17 @@ function percentile(
                     a - b
             );
 
-    if (!clean.length) {
+    if (
+        !clean.length
+    ) {
         return null;
     }
 
     const index =
-        (clean.length - 1) *
+        (
+            clean.length -
+            1
+        ) *
         percentileValue;
 
     const lower =
@@ -849,8 +513,7 @@ function percentile(
         );
 
     if (
-        lower ===
-        upper
+        lower === upper
     ) {
         return clean[
             lower
@@ -873,7 +536,10 @@ function percentile(
 function formatTimestamp(
     timestamp
 ) {
-    if (!timestamp) {
+    if (
+        timestamp === null ||
+        timestamp === undefined
+    ) {
         return null;
     }
 
@@ -909,16 +575,12 @@ async function cryptoRequest(
         if (
             value !==
                 undefined &&
-            value !==
-                null &&
-            value !==
-                ""
+            value !== null &&
+            value !== ""
         ) {
             url.searchParams.set(
                 key,
-                String(
-                    value
-                )
+                String(value)
             );
         }
     }
@@ -927,7 +589,9 @@ async function cryptoRequest(
         await fetch(
             url.toString(),
             {
-                method: "GET",
+                method:
+                    "GET",
+
                 headers: {
                     Accept:
                         "application/json"
@@ -935,7 +599,9 @@ async function cryptoRequest(
             }
         );
 
-    if (!response.ok) {
+    if (
+        !response.ok
+    ) {
         throw new Error(
             `Crypto.com HTTP ${response.status}`
         );
@@ -945,8 +611,7 @@ async function cryptoRequest(
         await response.json();
 
     if (
-        json.code !==
-        0
+        json.code !== 0
     ) {
         throw new Error(
             json.message ||
@@ -958,7 +623,185 @@ async function cryptoRequest(
     return json.result;
 }
 
-function scheduleDCMMarketSocketReconnect() {
+/*
+ * Extract a price/timestamp from several possible
+ * DCM WebSocket payload shapes.
+ */
+
+function extractMarketDataPoint(
+    payload
+) {
+    const candidates = [];
+
+    function collect(
+        value
+    ) {
+        if (
+            value === null ||
+            value === undefined
+        ) {
+            return;
+        }
+
+        if (
+            Array.isArray(value)
+        ) {
+            for (
+                const item of value
+            ) {
+                collect(
+                    item
+                );
+            }
+
+            return;
+        }
+
+        if (
+            typeof value ===
+            "object"
+        ) {
+            candidates.push(
+                value
+            );
+
+            for (
+                const nested of
+                    Object.values(
+                        value
+                    )
+            ) {
+                if (
+                    nested &&
+                    typeof nested ===
+                        "object"
+                ) {
+                    collect(
+                        nested
+                    );
+                }
+            }
+        }
+    }
+
+    collect(
+        payload
+    );
+
+    for (
+        const item of candidates
+    ) {
+        const price =
+            safeNumber(
+                item.v ??
+                    item.price ??
+                    item.value ??
+                    item.index_price ??
+                    item.indexPrice
+            );
+
+        const timestamp =
+            safeNumber(
+                item.t ??
+                    item.timestamp ??
+                    item.ts ??
+                    item.timestamp_ms
+            );
+
+        if (
+            price !== null
+        ) {
+            return {
+                price,
+
+                timestamp:
+                    timestamp !== null
+                        ? timestamp
+                        : now()
+            };
+        }
+    }
+
+    return null;
+}
+
+function subscribeDCMMarketChannel(
+    channel
+) {
+    if (
+        !dcmMarketSocket ||
+        dcmMarketSocket.readyState !==
+            1
+    ) {
+        return;
+    }
+
+    const request =
+        {
+            id:
+                dcmMarketSocketRequestId++,
+
+            method:
+                "subscribe",
+
+            params: {
+                channels: [
+                    channel
+                ]
+            }
+        };
+
+    try {
+        dcmMarketSocket.send(
+            JSON.stringify(
+                request
+            )
+        );
+
+        console.log(
+            `[ODIN] DCM subscribed: ${channel}`
+        );
+    } catch (
+        error
+    ) {
+        console.error(
+            "[ODIN] DCM subscription error:",
+            error.message
+        );
+    }
+}
+
+function subscribeDCMIndex() {
+    subscribeDCMMarketChannel(
+        `index.${CONFIG.underlyingIndex}`
+    );
+}
+
+function subscribeDCMSettlement(
+    symbol
+) {
+    if (
+        !symbol
+    ) {
+        return;
+    }
+
+    if (
+        dcmSubscribedContractSymbol ===
+        symbol
+    ) {
+        return;
+    }
+
+    dcmSubscribedContractSymbol =
+        symbol;
+
+    subscribeDCMMarketChannel(
+        `settlement.${symbol}`
+    );
+}
+
+function scheduleDCMMarketReconnect() {
     if (
         dcmMarketSocketRetryTimer
     ) {
@@ -977,64 +820,28 @@ function scheduleDCMMarketSocketReconnect() {
         );
 }
 
-function subscribeDCMMarketChannel(
-    channel
-) {
-    if (
-        !dcmMarketSocket ||
-        dcmMarketSocket.readyState !==
-            1
-    ) {
-        return;
+function connectDCMMarketSocket() {
+    if (dcmMarketSocketRetryTimer) {
+        clearTimeout(
+            dcmMarketSocketRetryTimer
+        );
+
+        dcmMarketSocketRetryTimer =
+            null;
     }
 
-    const request = {
-        id:
-            String(
-                dcmMarketSocketRequestId++
-            ),
+    dcmMarketSocket =
+        null;
 
-        method:
-            "subscribe",
-
-        params: {
-            channels: [
-                channel
-            ]
-        },
-
-        nonce:
-            String(
-                now()
-            )
-    };
-
-    dcmMarketSocket.send(
-        JSON.stringify(
-            request
-        )
+    console.log(
+        "[ODIN] DCM market WebSocket disabled in hosted runtime; using verified REST data sources only"
     );
 }
 
-function connectDCMMarketSocket() {
-    if (dcmMarketSocketRetryTimer) {
-        clearTimeout(dcmMarketSocketRetryTimer);
-        dcmMarketSocketRetryTimer = null;
-    }
-
-    dcmMarketSocket = null;
-}
-
-
 async function getBTCIndex() {
     /*
-     * Strike Options use the CDNA-funded BTC index.
-     * The DCM market-data websocket exposes the index channel
-     * for the exact underlying used by the Strike instrument.
-     *
-     * Prefer that live feed. The REST Exchange index remains only
-     * a fallback so Odin can continue displaying diagnostics if the
-     * DCM websocket is temporarily unavailable.
+     * Prefer the exact DCM/CDNA-funded index used by
+     * Strike Options.
      */
 
     if (
@@ -1065,6 +872,10 @@ async function getBTCIndex() {
         };
     }
 
+    /*
+     * REST fallback.
+     */
+
     try {
         const result =
             await cryptoRequest(
@@ -1076,14 +887,17 @@ async function getBTCIndex() {
                     valuation_type:
                         "index_price",
 
-                    count: 1
+                    count:
+                        1
                 }
             );
 
         const item =
             result?.data?.[0];
 
-        if (!item) {
+        if (
+            !item
+        ) {
             return null;
         }
 
@@ -1101,7 +915,9 @@ async function getBTCIndex() {
             source:
                 "EXCHANGE_INDEX_FALLBACK"
         };
-    } catch (error) {
+    } catch (
+        error
+    ) {
         return null;
     }
 }
@@ -1119,7 +935,9 @@ async function getBTCPerpTicker() {
     const ticker =
         result?.data?.[0];
 
-    if (!ticker) {
+    if (
+        !ticker
+    ) {
         return null;
     }
 
@@ -1169,14 +987,12 @@ async function getBTCBook() {
                 instrument_name:
                     CONFIG.underlyingPerp,
 
-                depth: 25
+                depth:
+                    25
             }
         );
 
-    return (
-        result?.data?.[0] ||
-        null
-    );
+    return result;
 }
 
 async function getBTCTrades() {
@@ -1187,7 +1003,8 @@ async function getBTCTrades() {
                 instrument_name:
                     CONFIG.underlyingPerp,
 
-                count: 50
+                count:
+                    50
             }
         );
 
@@ -1198,24 +1015,32 @@ async function getBTCTrades() {
 }
 
 async function getInstruments() {
-    let allInstruments = [];
-    let cursor = null;
+    let allInstruments =
+        [];
+
+    let cursor =
+        null;
 
     for (
         let page = 0;
         page < 1000;
         page++
     ) {
-        const params = {
-            inst_type:
-                "BINARY_OPTION",
+        const params =
+            {
+                inst_type:
+                    "BINARY_OPTION",
 
-            limit: 1000,
+                limit:
+                    1000,
 
-            since: 0
-        };
+                since:
+                    0
+            };
 
-        if (cursor) {
+        if (
+            cursor
+        ) {
             params.cursor =
                 cursor;
         }
@@ -1310,16 +1135,17 @@ function getStrikeOperator(
             instrument
         );
 
-    const operatorCandidates = [
-        instrument?.STRIKE_OPERATOR,
-        instrument?.strike_operator,
+    const operatorCandidates =
+        [
+            instrument?.STRIKE_OPERATOR,
+            instrument?.strike_operator,
 
-        attributes?.STRIKE_OPERATOR,
-        attributes?.strike_operator,
+            attributes?.STRIKE_OPERATOR,
+            attributes?.strike_operator,
 
-        metadata?.STRIKE_OPERATOR,
-        metadata?.strike_operator
-    ];
+            metadata?.STRIKE_OPERATOR,
+            metadata?.strike_operator
+        ];
 
     for (
         const candidate of
@@ -1328,8 +1154,7 @@ function getStrikeOperator(
         if (
             candidate !==
                 undefined &&
-            candidate !==
-                null
+            candidate !== null
         ) {
             return String(
                 candidate
@@ -1353,16 +1178,17 @@ function getStrikeIndex(
             instrument
         );
 
-    const indexCandidates = [
-        instrument?.STRIKE_INDEX,
-        instrument?.strike_index,
+    const indexCandidates =
+        [
+            instrument?.STRIKE_INDEX,
+            instrument?.strike_index,
 
-        attributes?.STRIKE_INDEX,
-        attributes?.strike_index,
+            attributes?.STRIKE_INDEX,
+            attributes?.strike_index,
 
-        metadata?.STRIKE_INDEX,
-        metadata?.strike_index
-    ];
+            metadata?.STRIKE_INDEX,
+            metadata?.strike_index
+        ];
 
     for (
         const candidate of
@@ -1374,8 +1200,7 @@ function getStrikeIndex(
             );
 
         if (
-            value !==
-            null
+            value !== null
         ) {
             return value;
         }
@@ -1388,7 +1213,8 @@ function getInstrumentText(
     instrument
 ) {
     return JSON.stringify(
-        instrument || {}
+        instrument ||
+            {}
     ).toUpperCase();
 }
 
@@ -1418,7 +1244,9 @@ function isDigitalCurrencyInstrument(
 function isBTCStrikeInstrument(
     instrument
 ) {
-    if (!instrument) {
+    if (
+        !instrument
+    ) {
         return false;
     }
 
@@ -1494,28 +1322,46 @@ function isBTCStrikeInstrument(
     }
 
     const directBTC =
-        underlying.includes("BTC") ||
-        symbol.includes("BTC") ||
-        displayName.includes("BTC") ||
-        baseCurrency === "BTC" ||
-        eventName.includes("BTC") ||
-        eventCode.includes("BTC") ||
-        metadataText.includes("BTC") ||
-        attributesText.includes("BTC");
+        underlying.includes(
+            "BTC"
+        ) ||
+        symbol.includes(
+            "BTC"
+        ) ||
+        displayName.includes(
+            "BTC"
+        ) ||
+        baseCurrency ===
+            "BTC" ||
+        eventName.includes(
+            "BTC"
+        ) ||
+        eventCode.includes(
+            "BTC"
+        ) ||
+        metadataText.includes(
+            "BTC"
+        ) ||
+        attributesText.includes(
+            "BTC"
+        );
 
-    const bitcoinPatterns = [
-        "BTCUSD",
-        "BTC-USD",
-        "BTC/USD",
-        "XBTUSD",
-        "XBT-USD",
-        "XBT/USD",
-        "BITCOIN"
-    ];
+    const bitcoinPatterns =
+        [
+            "BTCUSD",
+            "BTC-USD",
+            "BTC/USD",
+            "XBTUSD",
+            "XBT-USD",
+            "XBT/USD",
+            "BITCOIN"
+        ];
 
     const alternateBTC =
         bitcoinPatterns.some(
-            (pattern) =>
+            (
+                pattern
+            ) =>
                 text.includes(
                     pattern
                 )
@@ -1533,17 +1379,6 @@ function isBTCStrikeInstrument(
             instrument
         );
 
-    /*
-     * Strike Options currently expose the
-     * comparison operator in display_name,
-     * for example:
-     *
-     * "BITCOIN >73000 (4AM)"
-     *
-     * The DCM instrument payload may not provide
-     * STRIKE_OPERATOR as a separate field.
-     */
-
     const displayOperatorMatch =
         displayName.match(
             /(?:BITCOIN|BTC)\s*([<>]=?|=)/
@@ -1558,18 +1393,25 @@ function isBTCStrikeInstrument(
         );
 
     return (
-        detectedOperator === ">" ||
-        detectedOperator === ">=" ||
-        detectedOperator === "<" ||
-        detectedOperator === "<=" ||
-        detectedOperator === "="
+        detectedOperator ===
+            ">" ||
+        detectedOperator ===
+            ">=" ||
+        detectedOperator ===
+            "<" ||
+        detectedOperator ===
+            "<=" ||
+        detectedOperator ===
+            "="
     );
 }
 
 function extractStrikePrice(
     instrument
 ) {
-    if (!instrument) {
+    if (
+        !instrument
+    ) {
         return null;
     }
 
@@ -1583,19 +1425,20 @@ function extractStrikePrice(
             instrument
         );
 
-    const candidates = [
-        instrument?.strike_price,
-        instrument?.strikePrice,
-        instrument?.STRIKE_PRICE,
+    const candidates =
+        [
+            instrument?.strike_price,
+            instrument?.strikePrice,
+            instrument?.STRIKE_PRICE,
 
-        attributes?.strike_price,
-        attributes?.strikePrice,
-        attributes?.STRIKE_PRICE,
+            attributes?.strike_price,
+            attributes?.strikePrice,
+            attributes?.STRIKE_PRICE,
 
-        metadata?.strike_price,
-        metadata?.strikePrice,
-        metadata?.STRIKE_PRICE
-    ];
+            metadata?.strike_price,
+            metadata?.strikePrice,
+            metadata?.STRIKE_PRICE
+        ];
 
     for (
         const candidate of
@@ -1607,8 +1450,7 @@ function extractStrikePrice(
             );
 
         if (
-            value !==
-                null &&
+            value !== null &&
             value > 0
         ) {
             return value;
@@ -1625,12 +1467,13 @@ function extractStrikePrice(
             .join(" ")
             .toUpperCase();
 
-    const dollarPatterns = [
-        /\$([0-9][0-9,]*(?:\.[0-9]+)?)/,
-        /USD\s*([0-9][0-9,]*(?:\.[0-9]+)?)/,
-        /STRIKE[^0-9]*([0-9][0-9,]*(?:\.[0-9]+)?)/,
-        /([0-9][0-9,]*(?:\.[0-9]+)?)\s*USD/
-    ];
+    const dollarPatterns =
+        [
+            /\$([0-9][0-9,]*(?:\.[0-9]+)?)/,
+            /USD\s*([0-9][0-9,]*(?:\.[0-9]+)?)/,
+            /STRIKE[^0-9]*([0-9][0-9,]*(?:\.[0-9]+)?)/,
+            /([0-9][0-9,]*(?:\.[0-9]+)?)\s*USD/
+        ];
 
     for (
         const pattern of
@@ -1641,31 +1484,26 @@ function extractStrikePrice(
                 pattern
             );
 
-        if (match) {
+        if (
+            match
+        ) {
             const parsed =
                 safeNumber(
-                    match[1].replace(
-                        /,/g,
-                        ""
-                    )
+                    match[1]
+                        .replace(
+                            /,/g,
+                            ""
+                        )
                 );
 
             if (
-                parsed !==
-                    null &&
+                parsed !== null &&
                 parsed > 0
             ) {
                 return parsed;
             }
         }
     }
-
-    /*
-     * Crypto.com's Strike Option display names can expose the
-     * strike directly without a dollar sign, for example:
-     *
-     * "BITCOIN >73000 (4AM)"
-     */
 
     const displayName =
         String(
@@ -1696,6 +1534,54 @@ function extractStrikePrice(
             parsed <= 1000000
         ) {
             return parsed;
+        }
+    }
+
+    const displayMatches =
+        displayName.match(
+            /\$?[0-9][0-9,]*(?:\.[0-9]+)?/g
+        );
+
+    if (
+        displayMatches?.length
+    ) {
+        const numbers =
+            displayMatches
+                .map(
+                    (
+                        value
+                    ) =>
+                        safeNumber(
+                            value
+                                .replace(
+                                    /\$/g,
+                                    ""
+                                )
+                                .replace(
+                                    /,/g,
+                                    ""
+                                )
+                        )
+                )
+                .filter(
+                    Number.isFinite
+                )
+                .filter(
+                    (
+                        value
+                    ) =>
+                        value >=
+                            10000 &&
+                        value <=
+                            1000000
+                );
+
+        if (
+            numbers.length
+        ) {
+            return Math.min(
+                ...numbers
+            );
         }
     }
 
@@ -1758,6 +1644,50 @@ function normalizeInstrument(
     };
 }
 
+function parseDcmTimeValue(
+    value
+) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    const numeric =
+        safeNumber(value);
+
+    if (numeric !== null) {
+        return numeric < 100000000000
+            ? numeric * 1000
+            : numeric;
+    }
+
+    const text =
+        String(value).trim();
+
+    const match =
+        text.match(
+            /^(\d{4})(\d{2})(\d{2})-(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
+        );
+
+    if (!match) {
+        return null;
+    }
+
+    const milliseconds =
+        Number(
+            (match[7] || "0").padEnd(3, "0")
+        );
+
+    return Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4]),
+        Number(match[5]),
+        Number(match[6]),
+        milliseconds
+    );
+}
+
 function getPeriodCode(
     instrument
 ) {
@@ -1772,27 +1702,17 @@ function getPeriodCode(
         );
 
     const candidates = [
+        instrument?.PERIOD_CODE,
+        instrument?.period_code,
         attributes?.PERIOD_CODE,
         attributes?.period_code,
         metadata?.PERIOD_CODE,
-        metadata?.period_code,
-        instrument?.PERIOD_CODE,
-        instrument?.period_code
+        metadata?.period_code
     ];
 
-    for (
-        const candidate of
-            candidates
-    ) {
-        if (
-            candidate !==
-                undefined &&
-            candidate !==
-                null
-        ) {
-            return String(
-                candidate
-            )
+    for (const candidate of candidates) {
+        if (candidate !== undefined && candidate !== null) {
+            return String(candidate)
                 .trim()
                 .toUpperCase();
         }
@@ -1801,184 +1721,210 @@ function getPeriodCode(
     return null;
 }
 
-function normalizeTimeValue(
-    value
+function getOpenCloseTimes(
+    instrument
 ) {
-    const numeric =
-        safeNumber(
-            value
+    const attributes =
+        getInstrumentAttributes(
+            instrument
         );
 
-    if (numeric === null) {
-        return null;
-    }
-
-    if (
-        numeric <
-        100000000000
-    ) {
-        return (
-            numeric *
-            1000
+    const metadata =
+        getEventMetadata(
+            instrument
         );
+
+    const openCandidates = [
+        instrument?.OPEN_TIME,
+        instrument?.open_time,
+        attributes?.OPEN_TIME,
+        attributes?.open_time,
+        metadata?.OPEN_TIME,
+        metadata?.open_time
+    ];
+
+    const closeCandidates = [
+        instrument?.CLOSE_TIME,
+        instrument?.close_time,
+        attributes?.CLOSE_TIME,
+        attributes?.close_time,
+        metadata?.CLOSE_TIME,
+        metadata?.close_time
+    ];
+
+    for (const openValue of openCandidates) {
+        const openTime =
+            parseDcmTimeValue(openValue);
+
+        if (openTime === null) {
+            continue;
+        }
+
+        for (const closeValue of closeCandidates) {
+            const closeTime =
+                parseDcmTimeValue(closeValue);
+
+            if (closeTime === null) {
+                continue;
+            }
+
+            return {
+                openTime,
+                closeTime
+            };
+        }
     }
 
-    return numeric;
+    return null;
 }
 
-function parseDcmTimeValue(value) {
-    if (value === undefined || value === null) {
-        return null;
-    }
-
-    const numeric = safeNumber(value);
-
-    if (numeric !== null) {
-        return numeric < 100000000000
-            ? numeric * 1000
-            : numeric;
-    }
-
-    const text = String(value).trim();
-
-    const match = text.match(
-        /^(\d{8})-(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
-    );
-
-    if (!match) {
-        return null;
-    }
-
-    const milliseconds = Number(
-        (match[5] || "0").padEnd(3, "0")
-    );
-
-    return Date.UTC(
-        Number(match[1].slice(0, 4)),
-        Number(match[1].slice(4, 6)) - 1,
-        Number(match[1].slice(6, 8)),
-        Number(match[2]),
-        Number(match[3]),
-        Number(match[4]),
-        milliseconds
-    );
-}
-
-function isFifteenMinuteStrikeInstrument(
+function isTwentyMinuteStrikeInstrument(
     instrument
 ) {
     if (!instrument) {
         return false;
     }
 
-    const attributes =
-        getInstrumentAttributes(instrument);
+    const times =
+        getOpenCloseTimes(
+            instrument
+        );
 
-    const metadata =
-        getEventMetadata(instrument);
-
-    const openValue =
-        attributes?.OPEN_TIME ??
-        attributes?.open_time ??
-        metadata?.OPEN_TIME ??
-        metadata?.open_time ??
-        null;
-
-    const closeValue =
-        attributes?.CLOSE_TIME ??
-        attributes?.close_time ??
-        metadata?.CLOSE_TIME ??
-        metadata?.close_time ??
-        null;
-
-    const openTime =
-        parseDcmTimeValue(openValue);
-
-    const closeTime =
-        parseDcmTimeValue(closeValue);
-
-    if (
-        openTime !== null &&
-        closeTime !== null
-    ) {
-        const duration =
-            closeTime - openTime;
-
-        const closeDate =
-            new Date(closeTime);
-
-        const isQuarterHour =
-            closeDate.getUTCMinutes() % 15 === 0 &&
-            closeDate.getUTCSeconds() === 0;
-
+    if (times) {
         return (
             Math.abs(
-                duration - CONFIG.roundDurationMs
-            ) <= 1000 &&
-            isQuarterHour
+                (times.closeTime - times.openTime) -
+                    CONFIG.targetStrikeDurationMs
+            ) <= 1000
         );
     }
 
-    // If DCM does not expose OPEN_TIME/CLOSE_TIME on this payload,
-    // only accept an intraday BTC contract whose actual expiry is on
-    // a quarter-hour boundary. Never accept an arbitrary "next 20 min"
-    // intraday contract because that is what previously produced 6:20,
-    // 6:35, etc. expiries.
     const periodCode =
         getPeriodCode(instrument);
+
+    if (periodCode !== "I") {
+        return false;
+    }
 
     const expiry =
         safeNumber(
             instrument.expiry_timestamp_ms
         );
 
-    if (
-        periodCode === "I" &&
-        expiry !== null
-    ) {
-        const expiryDate =
-            new Date(expiry);
-
-        return (
-            expiry > now() &&
-            expiryDate.getUTCMinutes() % 15 === 0 &&
-            expiryDate.getUTCSeconds() === 0
-        );
+    if (expiry === null || expiry <= now()) {
+        return false;
     }
 
+    /*
+     * Without OPEN_TIME/CLOSE_TIME, a single intraday expiry is
+     * not enough evidence to call the contract 20 minutes. The
+     * refresh routine separately verifies a 20-minute expiry
+     * sequence before these instruments can be selected.
+     */
     return false;
 }
 
-function isAboveStrikeContract(
-    instrument
+function verifyTwentyMinuteCandidates(
+    candidates
 ) {
-    const operator =
-        getStrikeOperator(
-            instrument
-        );
+    const verified =
+        new Set();
 
-    if (
-        operator === ">" ||
-        operator === ">="
-    ) {
-        return true;
+    for (const instrument of candidates) {
+        const times =
+            getOpenCloseTimes(
+                instrument
+            );
+
+        if (
+            times &&
+            Math.abs(
+                (times.closeTime - times.openTime) -
+                    CONFIG.targetStrikeDurationMs
+            ) <= 1000
+        ) {
+            verified.add(
+                instrument.symbol
+            );
+        }
     }
 
-    const displayName =
-        String(
-            instrument?.display_name ||
-                ""
-        ).toUpperCase();
+    const intraday =
+        candidates
+            .filter(
+                (instrument) =>
+                    getPeriodCode(instrument) === "I" &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) !== null &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) > now()
+            )
+            .sort(
+                (a, b) =>
+                    safeNumber(a.expiry_timestamp_ms) -
+                    safeNumber(b.expiry_timestamp_ms)
+            );
 
-    return /(?:BITCOIN|BTC|XBT)\s*>/.test(
-        displayName
+    const expiryMap =
+        new Map();
+
+    for (const instrument of intraday) {
+        const expiry =
+            safeNumber(
+                instrument.expiry_timestamp_ms
+            );
+
+        if (!expiryMap.has(expiry)) {
+            expiryMap.set(expiry, []);
+        }
+
+        expiryMap.get(expiry).push(
+            instrument
+        );
+    }
+
+    const uniqueExpiries =
+        [...expiryMap.keys()].sort(
+            (a, b) => a - b
+        );
+
+    for (let i = 0; i < uniqueExpiries.length - 1; i++) {
+        const a = uniqueExpiries[i];
+        const b = uniqueExpiries[i + 1];
+
+        if (
+            b - a ===
+            CONFIG.targetStrikeDurationMs
+        ) {
+            for (const instrument of expiryMap.get(a)) {
+                verified.add(
+                    instrument.symbol
+                );
+            }
+
+            for (const instrument of expiryMap.get(b)) {
+                verified.add(
+                    instrument.symbol
+                );
+            }
+        }
+    }
+
+    return candidates.filter(
+        (instrument) =>
+            verified.has(
+                instrument.symbol
+            )
     );
 }
 
 function selectCurrentContract(
     candidates
 ) {
-    const currentTime = now();
+    const currentTime =
+        now();
 
     const valid =
         candidates
@@ -1986,20 +1932,35 @@ function selectCurrentContract(
                 (instrument) =>
                     instrument &&
                     instrument.tradable !== false &&
-                    isFifteenMinuteStrikeInstrument(instrument) &&
-                    isAboveStrikeContract(instrument) &&
-                    safeNumber(instrument.expiry_timestamp_ms) !== null &&
-                    safeNumber(instrument.expiry_timestamp_ms) > currentTime
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) !== null &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) > currentTime &&
+                    isAboveStrikeContract(
+                        instrument
+                    )
             )
             .map(
                 (instrument) => ({
                     instrument,
-                    expiry: safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ),
-                    strike: extractStrikePrice(instrument),
-                    strikeIndex: getStrikeIndex(instrument),
-                    operator: getStrikeOperator(instrument)
+                    expiry:
+                        safeNumber(
+                            instrument.expiry_timestamp_ms
+                        ),
+                    strike:
+                        extractStrikePrice(
+                            instrument
+                        ),
+                    strikeIndex:
+                        getStrikeIndex(
+                            instrument
+                        ),
+                    operator:
+                        getStrikeOperator(
+                            instrument
+                        )
                 })
             );
 
@@ -2007,18 +1968,18 @@ function selectCurrentContract(
         return null;
     }
 
-    // The active contract is the one that expires first. Only after
-    // fixing the expiry do we choose the closest strike for that exact
-    // contract window. This prevents the strike from jumping between
-    // different future expiries whenever BTC moves.
-    const nextExpiry = Math.min(
-        ...valid.map((item) => item.expiry)
-    );
+    const earliestExpiry =
+        Math.min(
+            ...valid.map(
+                (item) => item.expiry
+            )
+        );
 
     const sameExpiry =
         valid.filter(
             (item) =>
-                item.expiry === nextExpiry
+                item.expiry ===
+                earliestExpiry
         );
 
     const btcPrice =
@@ -2026,40 +1987,56 @@ function selectCurrentContract(
             ? state.btcIndexPrice
             : state.btcPrice;
 
-    if (btcPrice !== null) {
-        const withStrikes =
-            sameExpiry.filter(
-                (item) =>
-                    item.strike !== null
-            );
+    const withStrikes =
+        sameExpiry.filter(
+            (item) =>
+                item.strike !== null
+        );
 
-        if (withStrikes.length) {
-            return withStrikes.sort(
-                (a, b) => {
-                    const aDistance = Math.abs(
-                        a.strike - btcPrice
+    if (
+        btcPrice !== null &&
+        withStrikes.length
+    ) {
+        return withStrikes.sort(
+            (a, b) => {
+                const aDistance =
+                    Math.abs(
+                        a.strike -
+                            btcPrice
                     );
-                    const bDistance = Math.abs(
-                        b.strike - btcPrice
+
+                const bDistance =
+                    Math.abs(
+                        b.strike -
+                            btcPrice
                     );
 
-                    if (aDistance !== bDistance) {
-                        return aDistance - bDistance;
-                    }
-
+                if (
+                    aDistance !==
+                    bDistance
+                ) {
                     return (
-                        (a.strikeIndex ?? Number.MAX_SAFE_INTEGER) -
-                        (b.strikeIndex ?? Number.MAX_SAFE_INTEGER)
+                        aDistance -
+                        bDistance
                     );
                 }
-            )[0];
-        }
+
+                return (
+                    (a.strikeIndex ??
+                        Number.MAX_SAFE_INTEGER) -
+                    (b.strikeIndex ??
+                        Number.MAX_SAFE_INTEGER)
+                );
+            }
+        )[0];
     }
 
     return sameExpiry.sort(
         (a, b) =>
-            (a.strikeIndex ?? Number.MAX_SAFE_INTEGER) -
-            (b.strikeIndex ?? Number.MAX_SAFE_INTEGER)
+            (a.strikeIndex ??
+                Number.MAX_SAFE_INTEGER) -
+            (b.strikeIndex ??
+                Number.MAX_SAFE_INTEGER)
     )[0];
 }
 
@@ -2067,6 +2044,10 @@ async function refreshInstruments() {
     if (
         instrumentRefreshInProgress
     ) {
+        console.log(
+            "[ODIN] Instrument refresh already in progress - skipping duplicate refresh"
+        );
+
         return;
     }
 
@@ -2098,17 +2079,8 @@ async function refreshInstruments() {
                 isBTCStrikeInstrument
             );
 
-        const btcFifteenMinuteInstruments =
-            btcInstruments.filter(
-                isFifteenMinuteStrikeInstrument
-            );
-
         console.log(
             `[ODIN] BTC Strike candidates after DCM metadata filter: ${btcInstruments.length}`
-        );
-
-        console.log(
-            `[ODIN] BTC 15-minute Strike candidates: ${btcFifteenMinuteInstruments.length}`
         );
 
         const withDollarStrikes =
@@ -2124,15 +2096,6 @@ async function refreshInstruments() {
         console.log(
             `[ODIN] BTC instruments with detected dollar strikes: ${withDollarStrikes.length}`
         );
-
-        /*
-         * Diagnostic #1:
-         *
-         * BTC is currently not being identified by the
-         * metadata filter. Search the ENTIRE digital-currency
-         * instrument set for BTC/XBT/BITCOIN and print only
-         * compact fields so Render does not truncate the data.
-         */
 
         if (
             digitalCurrencyInstruments.length >
@@ -2193,22 +2156,44 @@ async function refreshInstruments() {
                             underlying:
                                 instrument.underlying_symbol,
 
+                            baseCcy:
+                                instrument.base_ccy,
+
+                            quoteCcy:
+                                instrument.quote_ccy,
+
                             productType:
                                 instrument.product_type,
 
                             detailProductType:
                                 instrument.detail_product_type,
 
+                            securityType:
+                                instrument.security_type,
+
+                            securitySubType:
+                                instrument.security_sub_type,
+
                             expiry:
                                 instrument.expiry_timestamp_ms,
 
-                            attributes:
-                                instrument.attributes
+                            tradable:
+                                instrument.tradable,
+
+                            strikeOperator:
+                                getStrikeOperator(
+                                    instrument
+                                ),
+
+                            strikeIndex:
+                                getStrikeIndex(
+                                    instrument
+                                )
                         })
                     );
 
             console.log(
-                "[ODIN] BTC diagnostic sample:",
+                "[ODIN] DIGITAL CURRENCY DIAGNOSTIC SAMPLE:",
                 JSON.stringify(
                     sample,
                     null,
@@ -2217,215 +2202,256 @@ async function refreshInstruments() {
             );
         }
 
-        /*
-         * Diagnostic #2:
-         *
-         * If BTC contracts exist but strike extraction is failing,
-         * print several raw examples so the exact DCM field layout
-         * can be handled without guessing.
-         */
-
-        if (
-            btcInstruments.length >
-                0 &&
-            withDollarStrikes.length ===
-                0
-        ) {
-            const strikeDiagnostic =
+        const verifiedTwentyMinuteInstruments =
+            verifyTwentyMinuteCandidates(
                 btcInstruments
-                    .slice(
-                        0,
-                        10
-                    )
-                    .map(
-                        (
-                            instrument
-                        ) => ({
-                            symbol:
-                                instrument.symbol,
-
-                            displayName:
-                                instrument.display_name,
-
-                            underlying:
-                                instrument.underlying_symbol,
-
-                            attributes:
-                                instrument.attributes,
-
-                            eventDetails:
-                                instrument.event_details
-                        })
-                    );
-
-            console.log(
-                "[ODIN] BTC strike diagnostic sample:",
-                JSON.stringify(
-                    strikeDiagnostic,
-                    null,
-                    2
-                )
             );
-        }
 
-        /*
-         * Diagnostic #3:
-         *
-         * If BTC contracts exist but the 15-minute filter is
-         * rejecting them, inspect period/open/close metadata.
-         */
+        console.log(
+            `[ODIN] BTC 20-minute Strike candidates VERIFIED: ${verifiedTwentyMinuteInstruments.length}`
+        );
+
         if (
-            btcInstruments.length >
-                0 &&
-            btcFifteenMinuteInstruments.length ===
-                0
+            verifiedTwentyMinuteInstruments.length === 0
         ) {
-            const durationDiagnostic =
-                btcInstruments
-                    .slice(
-                        0,
-                        20
+            const intraday =
+                btcInstruments.filter(
+                    (instrument) =>
+                        getPeriodCode(instrument) === "I"
+                );
+
+            const expirySummary =
+                [...new Set(
+                    intraday
+                        .map(
+                            (instrument) =>
+                                safeNumber(
+                                    instrument.expiry_timestamp_ms
+                                )
+                        )
+                        .filter(
+                            (expiry) =>
+                                expiry !== null &&
+                                expiry > now()
+                        )
+                )]
+                    .sort(
+                        (a, b) => a - b
                     )
+                    .slice(0, 12)
                     .map(
-                        (
-                            instrument
-                        ) => {
-                            const attributes =
-                                getInstrumentAttributes(
-                                    instrument
-                                );
-
-                            const metadata =
-                                getEventMetadata(
-                                    instrument
-                                );
-
-                            return {
-                                symbol:
-                                    instrument.symbol,
-
-                                displayName:
-                                    instrument.display_name,
-
-                                expiry:
-                                    instrument.expiry_timestamp_ms,
-
-                                periodCode:
-                                    getPeriodCode(
-                                        instrument
-                                    ),
-
-                                openTime:
-                                    attributes.OPEN_TIME ||
-                                    attributes.open_time ||
-                                    metadata.OPEN_TIME ||
-                                    metadata.open_time ||
-                                    null,
-
-                                closeTime:
-                                    attributes.CLOSE_TIME ||
-                                    attributes.close_time ||
-                                    metadata.CLOSE_TIME ||
-                                    metadata.close_time ||
-                                    null,
-
-                                attributes,
-                                metadata
-                            };
-                        }
+                        (expiry) =>
+                            new Date(
+                                expiry
+                            ).toISOString()
                     );
 
             console.log(
-                "[ODIN] BTC duration diagnostic sample:",
+                "[ODIN] No VERIFIED 20-minute BTC Strike contract is available. Intraday future expiries:",
                 JSON.stringify(
-                    durationDiagnostic,
-                    null,
-                    2
+                    expirySummary
                 )
             );
         }
 
         instruments =
-            btcFifteenMinuteInstruments.map(
-                normalizeInstrument
+            verifiedTwentyMinuteInstruments;
+
+        /*
+         * Preserve an active paper contract across
+         * instrument-cache refreshes.
+         */
+
+        const lockedContractSymbol =
+            currentRound?.symbol;
+
+        const lockedContract =
+            lockedContractSymbol
+                ? instruments.find(
+                      (
+                          instrument
+                      ) =>
+                          instrument.symbol ===
+                          lockedContractSymbol
+                  )
+                : null;
+
+        if (
+            currentRound &&
+            lockedContract
+        ) {
+            currentContract =
+                {
+                    instrument:
+                        lockedContract,
+
+                    expiry:
+                        safeNumber(
+                            lockedContract
+                                .expiry_timestamp_ms
+                        ),
+
+                    strike:
+                        extractStrikePrice(
+                            lockedContract
+                        ),
+
+                    strikeIndex:
+                        getStrikeIndex(
+                            lockedContract
+                        ),
+
+                    operator:
+                        getStrikeOperator(
+                            lockedContract
+                        )
+                };
+
+            console.log(
+                `[ODIN] Keeping locked paper contract: ${lockedContract.symbol}`
             );
-
-        const activeExpiry =
-            currentContract &&
-            safeNumber(currentContract.expiry);
-
-        const activeStillValid =
-            activeExpiry !== null &&
-            activeExpiry > now();
-
-        if (activeStillValid) {
-            // Never re-pick the strike while the current contract is active.
-            resolveCurrentContract();
         } else {
-            const selected =
+            currentContract =
                 selectCurrentContract(
-                    btcFifteenMinuteInstruments
+                    instruments
                 );
 
-            if (selected) {
-                const previousSymbol =
-                    currentContract?.instrument?.symbol ||
-                    null;
-
-                currentContract = selected;
-
-                if (
-                    previousSymbol &&
-                    previousSymbol !== selected.instrument.symbol
-                ) {
-                    console.log(
-                        `[ODIN] Contract changed: ${previousSymbol} -> ${selected.instrument.symbol}`
-                    );
-                }
-
-                state.contractSymbol =
-                    selected.instrument.symbol || null;
-                state.contractExpiry =
-                    selected.expiry || null;
-                state.strikePrice =
-                    safeNumber(selected.strike);
-                state.activeRoundId =
-                    createRoundId(selected.expiry);
-                state.secondsRemaining =
-                    Math.max(
-                        0,
-                        Math.floor(
-                            (selected.expiry - now()) /
-                            1000
-                        )
-                    );
-
-                dcmSubscribedContractSymbol =
-                    selected.instrument.symbol || null;
+            if (
+                currentContract
+            ) {
+                console.log(
+                    `[ODIN] Selected BTC contract: ${currentContract.instrument.symbol}`
+                );
             } else {
-                currentContract = null;
-                state.contractSymbol = null;
-                state.contractExpiry = null;
-                state.strikePrice = null;
-                state.secondsRemaining = null;
-                state.activeRoundId = null;
-                dcmSubscribedContractSymbol = null;
+                console.log(
+                    "[ODIN] No current BTC Strike contract selected"
+                );
             }
         }
 
-            if (
-                now() -
-                    lastNoContractLog >
+        if (
+            instruments.length ===
+                0 &&
+            now() -
+                lastNoContractLog >
                 30000
-            ) {
-                console.log(
-                    "[ODIN] No active BTC 15-minute Strike Option contract found."
+        ) {
+            lastNoContractLog =
+                now();
+
+            console.log(
+                "[ODIN] Loaded 0 BTC Strike instruments"
+            );
+        }
+
+        if (
+            currentContract
+        ) {
+            const instrument =
+                currentContract.instrument;
+
+            state.contractSymbol =
+                instrument.symbol ||
+                null;
+
+            state.contractExpiry =
+                safeNumber(
+                    instrument.expiry_timestamp_ms
                 );
 
-                lastNoContractLog =
-                    now();
-            }
-    } catch (error) {
+            state.strikePrice =
+                currentContract.strike;
+
+            state.strikeDistance =
+                state.btcIndexPrice !==
+                    null &&
+                state.strikePrice !==
+                    null
+                    ? state.btcIndexPrice -
+                        state.strikePrice
+                    : state.btcPrice !==
+                          null &&
+                      state.strikePrice !==
+                          null
+                        ? state.btcPrice -
+                            state.strikePrice
+                        : null;
+
+            const referencePrice =
+                state.btcIndexPrice !==
+                null
+                    ? state.btcIndexPrice
+                    : state.btcPrice;
+
+            state.strikeDistancePct =
+                referencePrice !==
+                    null &&
+                state.strikePrice !==
+                    null &&
+                state.strikePrice !==
+                    0
+                    ? (
+                          (
+                              referencePrice -
+                              state.strikePrice
+                          ) /
+                          state.strikePrice
+                      ) *
+                      100
+                    : null;
+
+            state.secondsRemaining =
+                state.contractExpiry !==
+                    null
+                    ? Math.max(
+                          0,
+                          (
+                              state.contractExpiry -
+                              now()
+                          ) /
+                              1000
+                      )
+                    : null;
+
+            state.activeRoundId =
+                createRoundId(
+                    state.contractExpiry
+                );
+
+            subscribeDCMSettlement(
+                instrument.symbol
+            );
+        } else {
+            state.contractSymbol =
+                null;
+
+            state.contractExpiry =
+                null;
+
+            state.strikePrice =
+                null;
+
+            state.strikeDistance =
+                null;
+
+            state.strikeDistancePct =
+                null;
+
+            state.secondsRemaining =
+                null;
+
+            state.activeRoundId =
+                null;
+        }
+
+        state.connected =
+            true;
+    } catch (
+        error
+    ) {
+        state.connected =
+            false;
+
         console.error(
             "[ODIN] Instrument refresh error:",
             error.message
@@ -2436,238 +2462,271 @@ async function refreshInstruments() {
     }
 }
 
-function resolveCurrentContract() {
-    const currentTime = now();
-
-    if (
-        currentRound &&
-        currentRound.symbol &&
-        safeNumber(currentRound.expiry) !== null &&
-        currentRound.expiry > currentTime
-    ) {
-        const locked =
-            rawBinaryInstruments.find(
-                (instrument) =>
-                    instrument.symbol === currentRound.symbol &&
-                    safeNumber(instrument.expiry_timestamp_ms) ===
-                        safeNumber(currentRound.expiry)
-            );
-
-        if (locked) {
-            currentContract = {
-                instrument: locked,
-                expiry: safeNumber(locked.expiry_timestamp_ms),
-                strike: extractStrikePrice(locked),
-                strikeIndex: getStrikeIndex(locked),
-                operator: getStrikeOperator(locked)
-            };
-
-            state.contractSymbol = locked.symbol || null;
-            state.contractExpiry = currentContract.expiry || null;
-            state.strikePrice = currentContract.strike || null;
-            state.secondsRemaining = Math.max(
-                0,
-                Math.floor(
-                    (currentContract.expiry - currentTime) / 1000
-                )
-            );
-            state.activeRoundId = currentRound.id;
-            return;
-        }
-    }
-
-    if (
-        currentContract &&
-        safeNumber(currentContract.expiry) !== null &&
-        currentContract.expiry > currentTime
-    ) {
-        state.contractSymbol =
-            currentContract.instrument?.symbol || null;
-        state.contractExpiry = currentContract.expiry;
-        state.strikePrice = safeNumber(currentContract.strike);
-        state.secondsRemaining = Math.max(
-            0,
-            Math.floor(
-                (currentContract.expiry - currentTime) / 1000
-            )
-        );
-        state.activeRoundId =
-            currentRound?.id ||
-            createRoundId(currentContract.expiry);
-        return;
-    }
-
-    currentContract = null;
-
-    const selected =
-        selectCurrentContract(rawBinaryInstruments);
-
-    if (!selected) {
-        state.contractSymbol = null;
-        state.contractExpiry = null;
-        state.strikePrice = null;
-        state.secondsRemaining = null;
-        state.activeRoundId = null;
-        dcmSubscribedContractSymbol = null;
-        return;
-    }
-
-    currentContract = selected;
-
-    state.contractSymbol =
-        selected.instrument.symbol || null;
-    state.contractExpiry = selected.expiry || null;
-    state.strikePrice = safeNumber(selected.strike);
-    state.secondsRemaining = Math.max(
-        0,
-        Math.floor(
-            (selected.expiry - currentTime) / 1000
-        )
-    );
-    state.activeRoundId =
-        createRoundId(selected.expiry);
-
-    dcmSubscribedContractSymbol =
-        selected.instrument.symbol || null;
-}
-
-function calculateReturns(
-    current,
-    previous
+async function getContractTicker(
+    contract
 ) {
     if (
-        current === null ||
-        previous === null ||
-        previous === 0
+        !contract ||
+        !contract.instrument ||
+        !contract.instrument.symbol
     ) {
         return null;
     }
 
-    return (
-        (
-            current -
-            previous
-        ) /
-        previous
-    ) *
-    100;
+    const result =
+        await cryptoRequest(
+            "public/get-tickers",
+            {
+                instrument_name:
+                    contract.instrument
+                        .symbol
+            },
+            CRYPTO_DCM_API
+        );
+
+    const ticker =
+        result?.data?.[0];
+
+    if (
+        !ticker
+    ) {
+        return null;
+    }
+
+    return {
+        last:
+            safeNumber(
+                ticker.a
+            ),
+
+        bid:
+            safeNumber(
+                ticker.b
+            ),
+
+        ask:
+            safeNumber(
+                ticker.k
+            ),
+
+        bidSize:
+            safeNumber(
+                ticker.bs
+            ),
+
+        askSize:
+            safeNumber(
+                ticker.ks
+            ),
+
+        timestamp:
+            safeNumber(
+                ticker.t
+            )
+    };
 }
 
-function getRecentPriceWindow(
-    milliseconds
+function updatePriceHistory(
+    price,
+    timestamp
 ) {
-    const cutoff =
-        now() -
-        milliseconds;
+    if (
+        price === null
+    ) {
+        return;
+    }
 
-    return priceHistory.filter(
-        (
-            item
-        ) =>
-            item.timestamp >=
-            cutoff
-    );
+    priceHistory.push({
+        timestamp,
+        price
+    });
+
+    while (
+        priceHistory.length >
+        CONFIG.maxPriceHistory
+    ) {
+        priceHistory.shift();
+    }
 }
 
-function getRecentTradeWindow(
-    milliseconds
+function updateTradeHistory(
+    trades
 ) {
-    const cutoff =
-        now() -
-        milliseconds;
+    if (
+        !Array.isArray(
+            trades
+        )
+    ) {
+        return;
+    }
 
-    return tradeHistory.filter(
+    for (
+        const trade of trades
+    ) {
+        const timestamp =
+            safeNumber(
+                trade.t
+            ) ||
+            now();
+
+        const price =
+            safeNumber(
+                trade.p
+            );
+
+        const quantity =
+            safeNumber(
+                trade.q
+            );
+
+        if (
+            price === null ||
+            quantity === null
+        ) {
+            continue;
+        }
+
+        const exists =
+            tradeHistory.some(
+                (
+                    item
+                ) =>
+                    item.timestamp ===
+                        timestamp &&
+                    item.price ===
+                        price &&
+                    item.quantity ===
+                        quantity
+            );
+
+        if (
+            exists
+        ) {
+            continue;
+        }
+
+        tradeHistory.push({
+            timestamp,
+
+            price,
+
+            quantity,
+
+            side:
+                trade.s ||
+                null
+        });
+    }
+
+    tradeHistory.sort(
         (
-            item
+            a,
+            b
         ) =>
-            item.timestamp >=
-            cutoff
+            a.timestamp -
+            b.timestamp
     );
-}
 
-function getRecentOrderBookWindow(
-    milliseconds
-) {
-    const cutoff =
-        now() -
-        milliseconds;
-
-    return orderBookHistory.filter(
-        (
-            item
-        ) =>
-            item.timestamp >=
-            cutoff
-    );
+    while (
+        tradeHistory.length >
+        CONFIG.maxTradeHistory
+    ) {
+        tradeHistory.shift();
+    }
 }
 
 function calculateMomentum(
     milliseconds
 ) {
-    const window =
-        getRecentPriceWindow(
-            milliseconds
+    const cutoff =
+        now() -
+        milliseconds;
+
+    const relevant =
+        priceHistory.filter(
+            (
+                item
+            ) =>
+                item.timestamp >=
+                cutoff
         );
 
     if (
-        window.length <
+        relevant.length <
         2
     ) {
         return null;
     }
 
     const first =
-        window[0].price;
+        relevant[0].price;
 
     const last =
-        window[
-            window.length -
-                1
+        relevant[
+            relevant.length -
+            1
         ].price;
 
-    return calculateReturns(
-        last,
+    if (
+        first === null ||
+        last === null ||
+        first === 0
+    ) {
+        return null;
+    }
+
+    return (
+        (
+            last -
+            first
+        ) /
         first
-    );
+    ) *
+    100;
 }
 
 function calculateVolatility(
     milliseconds
 ) {
-    const window =
-        getRecentPriceWindow(
-            milliseconds
+    const cutoff =
+        now() -
+        milliseconds;
+
+    const relevant =
+        priceHistory.filter(
+            (
+                item
+            ) =>
+                item.timestamp >=
+                cutoff
         );
 
     if (
-        window.length <
+        relevant.length <
         3
     ) {
         return null;
     }
 
-    const returns = [];
+    const returns =
+        [];
 
     for (
         let i = 1;
-        i < window.length;
+        i < relevant.length;
         i++
     ) {
         const previous =
-            window[
-                i - 1
-            ].price;
+            relevant[i - 1]
+                .price;
 
         const current =
-            window[i].price;
+            relevant[i].price;
 
         if (
-            previous ===
-                null ||
-            current ===
-                null ||
-            previous ===
-                0
+            previous === null ||
+            current === null ||
+            previous === 0
         ) {
             continue;
         }
@@ -2684,86 +2743,54 @@ function calculateVolatility(
         );
     }
 
-    const deviation =
-        standardDeviation(
-            returns
-        );
-
-    if (
-        deviation ===
-            null
-    ) {
-        return null;
-    }
-
-    return deviation;
+    return standardDeviation(
+        returns
+    );
 }
 
 function calculateVWAP(
     milliseconds
 ) {
-    const window =
-        getRecentTradeWindow(
-            milliseconds
+    const cutoff =
+        now() -
+        milliseconds;
+
+    const relevant =
+        tradeHistory.filter(
+            (
+                trade
+            ) =>
+                trade.timestamp >=
+                cutoff
         );
 
-    if (!window.length) {
-        return null;
-    }
-
-    let totalValue = 0;
-    let totalVolume = 0;
-
-    for (
-        const trade of
-            window
-    ) {
-        const price =
-            safeNumber(
-                trade.price
-            );
-
-        const quantity =
-            safeNumber(
-                trade.quantity
-            );
-
-        if (
-            price ===
-                null ||
-            quantity ===
-                null ||
-            quantity <=
-                0
-        ) {
-            continue;
-        }
-
-        totalValue +=
-            price *
-            quantity;
-
-        totalVolume +=
-            quantity;
-    }
-
     if (
-        totalVolume <=
-        0
+        !relevant.length
     ) {
         return null;
     }
 
-    return (
-        totalValue /
-        totalVolume
+    return weightedAverage(
+        relevant.map(
+            (
+                trade
+            ) => ({
+                value:
+                    trade.price,
+
+                weight:
+                    trade.quantity
+            })
+        )
     );
 }
 
-function calculateOrderBookImbalance(
+function calculateOrderBookMetrics(
     book
 ) {
-    if (!book) {
+    if (
+        !book
+    ) {
         return null;
     }
 
@@ -2781,21 +2808,29 @@ function calculateOrderBookImbalance(
             ? book.asks
             : [];
 
-    let bidVolume = 0;
-    let askVolume = 0;
+    let bidVolume =
+        0;
+
+    let askVolume =
+        0;
 
     for (
-        const level of
-            bids
+        const bid of bids
     ) {
         const quantity =
-            safeNumber(
-                level?.[1]
-            );
+            Array.isArray(
+                bid
+            )
+                ? safeNumber(
+                      bid[1]
+                  )
+                : safeNumber(
+                      bid.q ??
+                          bid.quantity
+                  );
 
         if (
-            quantity !==
-                null
+            quantity !== null
         ) {
             bidVolume +=
                 quantity;
@@ -2803,17 +2838,22 @@ function calculateOrderBookImbalance(
     }
 
     for (
-        const level of
-            asks
+        const ask of asks
     ) {
         const quantity =
-            safeNumber(
-                level?.[1]
-            );
+            Array.isArray(
+                ask
+            )
+                ? safeNumber(
+                      ask[1]
+                  )
+                : safeNumber(
+                      ask.q ??
+                          ask.quantity
+                  );
 
         if (
-            quantity !==
-                null
+            quantity !== null
         ) {
             askVolume +=
                 quantity;
@@ -2825,74 +2865,68 @@ function calculateOrderBookImbalance(
         askVolume;
 
     if (
-        total <=
-        0
+        !total
     ) {
         return null;
     }
 
-    return (
-        (
-            bidVolume -
-            askVolume
-        ) /
-        total
-    );
+    return {
+        bidVolume,
+
+        askVolume,
+
+        imbalance:
+            (
+                bidVolume -
+                askVolume
+            ) /
+            total
+    };
 }
 
-function calculateTradeFlow(
-    trades
-) {
-    if (
-        !Array.isArray(
-            trades
-        ) ||
-        !trades.length
-    ) {
-        return null;
-    }
+function calculateTradeFlow() {
+    const cutoff =
+        now() -
+        3 *
+        60 *
+        1000;
 
-    let buyVolume = 0;
-    let sellVolume = 0;
+    const relevant =
+        tradeHistory.filter(
+            (
+                trade
+            ) =>
+                trade.timestamp >=
+                cutoff
+        );
+
+    let buyVolume =
+        0;
+
+    let sellVolume =
+        0;
 
     for (
-        const trade of
-            trades
+        const trade of relevant
     ) {
-        const quantity =
-            safeNumber(
-                trade.q ||
-                    trade.quantity
-            );
-
         if (
-            quantity ===
-                null ||
-            quantity <=
-                0
-        ) {
-            continue;
-        }
-
-        const side =
             String(
-                trade.s ||
-                    trade.side ||
+                trade.side ||
                     ""
-            ).toUpperCase();
-
-        if (
-            side ===
-                "BUY"
+            ).toUpperCase() ===
+            "BUY"
         ) {
             buyVolume +=
-                quantity;
+                trade.quantity;
         } else if (
-            side ===
-                "SELL"
+            String(
+                trade.side ||
+                    ""
+            ).toUpperCase() ===
+            "SELL"
         ) {
             sellVolume +=
-                quantity;
+                trade.quantity;
         }
     }
 
@@ -2900,155 +2934,532 @@ function calculateTradeFlow(
         buyVolume +
         sellVolume;
 
+    return {
+        buyVolume,
+
+        sellVolume,
+
+        imbalance:
+            total > 0
+                ? (
+                      buyVolume -
+                      sellVolume
+                  ) /
+                  total
+                : 0
+    };
+}
+
+function checkDataIntegrity() {
+    const reasons =
+        [];
+
     if (
-        total <=
-        0
+        state.btcPrice ===
+        null
     ) {
-        return null;
+        reasons.push(
+            "BTC perp price unavailable"
+        );
     }
 
+    if (
+        state.btcIndexPrice ===
+        null
+    ) {
+        reasons.push(
+            "BTC index unavailable"
+        );
+    }
+
+    if (
+        state.lastUpdate ===
+        null
+    ) {
+        reasons.push(
+            "market data has not updated"
+        );
+    } else if (
+        now() -
+            state.lastUpdate >
+        CONFIG.maxIndexAgeMs
+    ) {
+        reasons.push(
+            "market data is stale"
+        );
+    }
+
+    if (
+        state.btcIndexTimestamp !==
+            undefined &&
+        state.btcIndexTimestamp !==
+            null
+    ) {
+        const indexAge =
+            now() -
+            state.btcIndexTimestamp;
+
+        if (
+            indexAge >
+            CONFIG.maxIndexAgeMs
+        ) {
+            reasons.push(
+                "BTC index timestamp is stale"
+            );
+        }
+    }
+
+    if (
+        state.btcIndexStale
+    ) {
+        reasons.push(
+            "BTC DCM index feed is stale"
+        );
+    }
+
+    if (
+        state.btcIndexPrice !==
+            null &&
+        state.btcPrice !==
+            null &&
+        state.btcPrice !==
+            0
+    ) {
+        const differencePct =
+            Math.abs(
+                (
+                    (
+                        state.btcIndexPrice -
+                        state.btcPrice
+                    ) /
+                    state.btcPrice
+                ) *
+                100
+            );
+
+        if (
+            differencePct >
+            CONFIG.maxIndexPerpDifferencePct
+        ) {
+            reasons.push(
+                "BTC index/perpetual price divergence is unusually large"
+            );
+        }
+    }
+
+    if (
+        state.dataQuality <
+        70
+    ) {
+        reasons.push(
+            "data quality is below the paper-model threshold"
+        );
+    }
+
+    if (
+        !priceHistory.length
+    ) {
+        reasons.push(
+            "insufficient BTC price history"
+        );
+    }
+
+    state.paperEmergency =
+        reasons.length >
+        0;
+
+    state.paperEmergencyReason =
+        reasons.length
+            ? reasons.join(
+                  "; "
+              )
+            : null;
+
     return (
-        (
-            buyVolume -
-            sellVolume
-        ) /
-        total
+        reasons.length ===
+        0
     );
 }
 
-function calculateDistanceMetrics() {
+async function collectMarketData() {
+    try {
+        const [
+            index,
+            perp,
+            book,
+            trades
+        ] =
+            await Promise.all(
+                [
+                    getBTCIndex(),
+
+                    getBTCPerpTicker(),
+
+                    getBTCBook(),
+
+                    getBTCTrades()
+                ]
+            );
+
+        state.dataSourceHealth = {
+            ...(state.dataSourceHealth || {}),
+            dcmInstruments:
+                rawBinaryInstruments.length > 0,
+            btcIndex:
+                Boolean(
+                    index &&
+                    index.price !== null &&
+                    index.timestamp !== null
+                ),
+            btcPerp:
+                Boolean(
+                    perp &&
+                    perp.last !== null
+                ),
+            btcBook:
+                Boolean(
+                    book &&
+                    calculateOrderBookMetrics(book)
+                ),
+            btcTrades:
+                Array.isArray(trades) &&
+                trades.length > 0,
+            verifiedStrikeContract:
+                Boolean(currentContract),
+            lastCheckedAt:
+                now()
+        };
+
+        if (
+            index &&
+            index.price !==
+                null
+        ) {
+            state.btcIndexPrice =
+                index.price;
+
+            state.btcIndexTimestamp =
+                index.timestamp ||
+                now();
+
+            state.btcIndexSource =
+                index.source ||
+                null;
+
+            state.btcIndexStale =
+                now() -
+                    state.btcIndexTimestamp >
+                CONFIG.maxIndexAgeMs;
+        } else {
+            state.btcIndexStale =
+                true;
+        }
+
+        if (
+            perp &&
+            perp.last !==
+                null
+        ) {
+            state.btcPrice =
+                perp.last;
+        } else if (
+            index &&
+            index.price !==
+                null
+        ) {
+            state.btcPrice =
+                index.price;
+        }
+
+        updatePriceHistory(
+            state.btcPrice,
+            now()
+        );
+
+        updateTradeHistory(
+            trades
+        );
+
+        const bookMetrics =
+            calculateOrderBookMetrics(
+                book
+            );
+
+        if (
+            bookMetrics
+        ) {
+            state.orderBookImbalance =
+                bookMetrics.imbalance;
+
+            orderBookHistory.push({
+                timestamp:
+                    now(),
+
+                ...bookMetrics
+            });
+
+            while (
+                orderBookHistory.length >
+                CONFIG.maxOrderBookHistory
+            ) {
+                orderBookHistory.shift();
+            }
+        }
+
+        const flow =
+            calculateTradeFlow();
+
+        state.tradeFlow =
+            flow.imbalance;
+
+        previousVelocity =
+            state.velocity;
+
+        if (
+            previousPrice !==
+                null &&
+            state.btcPrice !==
+                null
+        ) {
+            state.velocity =
+                state.btcPrice -
+                previousPrice;
+
+            if (
+                previousVelocity !==
+                    null
+            ) {
+                state.acceleration =
+                    state.velocity -
+                    previousVelocity;
+            }
+        }
+
+        previousPrice =
+            state.btcPrice;
+
+        state.lastUpdate =
+            now();
+    } catch (
+        error
+    ) {
+        console.error(
+            "[ODIN] Market data error:",
+            error.message
+        );
+    }
+}
+
+async function collectContractData() {
     if (
-        state.btcIndexPrice ===
-            null ||
-        state.strikePrice ===
+        !currentContract
+    ) {
+        return;
+    }
+
+    try {
+        const ticker =
+            await getContractTicker(
+                currentContract
+            );
+
+        if (
+            !ticker
+        ) {
+            return;
+        }
+
+        state.contractBid =
+            ticker.bid;
+
+        state.contractAsk =
+            ticker.ask;
+
+        if (
+            ticker.bid !==
+                null &&
+            ticker.ask !==
+                null
+        ) {
+            state.contractMid =
+                (
+                    ticker.bid +
+                    ticker.ask
+                ) /
+                2;
+
+            state.marketProbability =
+                clamp(
+                    state.contractMid *
+                        10,
+                    0,
+                    100
+                );
+        } else {
+            state.contractMid =
+                ticker.last;
+
+            state.marketProbability =
+                ticker.last !==
+                null
+                    ? clamp(
+                          ticker.last *
+                              10,
+                          0,
+                          100
+                      )
+                    : null;
+        }
+    } catch (
+        error
+    ) {
+        console.error(
+            "[ODIN] Contract ticker error:",
+            error.message
+        );
+    }
+}
+
+function secondsSinceRoundStart() {
+    if (
+        !currentRound ||
+        !currentRound.startedAt
+    ) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        (
+            now() -
+            currentRound.startedAt
+        ) /
+            1000
+    );
+}
+
+function calculateStateMetrics() {
+    state.momentum1m =
+        calculateMomentum(
+            60 *
+                1000
+        );
+
+    state.momentum3m =
+        calculateMomentum(
+            3 *
+                60 *
+                1000
+        );
+
+    state.momentum5m =
+        calculateMomentum(
+            5 *
+                60 *
+                1000
+        );
+
+    state.volatility1m =
+        calculateVolatility(
+            60 *
+                1000
+        );
+
+    state.volatility3m =
+        calculateVolatility(
+            3 *
+                60 *
+                1000
+        );
+
+    state.vwap =
+        calculateVWAP(
+            5 *
+                60 *
+                1000
+        );
+
+    const referencePrice =
+        state.btcIndexPrice !==
+        null
+            ? state.btcIndexPrice
+            : state.btcPrice;
+
+    if (
+        referencePrice !==
+            null &&
+        state.strikePrice !==
             null
     ) {
         state.strikeDistance =
-            null;
+            referencePrice -
+            state.strikePrice;
 
         state.strikeDistancePct =
-            null;
-
-        state.distanceZScore =
-            null;
-
-        return;
-    }
-
-    state.strikeDistance =
-        state.btcIndexPrice -
-        state.strikePrice;
-
-    state.strikeDistancePct =
-        (
-            state.strikeDistance /
-            state.strikePrice
-        ) *
-        100;
-
-    const distances =
-        priceHistory
-            .map(
+            (
                 (
-                    item
-                ) => {
-                    if (
-                        item.price ===
-                            null
-                    ) {
-                        return null;
-                    }
-
-                    return (
-                        item.price -
-                        state.strikePrice
-                    );
-                }
-            )
-            .filter(
-                Number.isFinite
-            );
-
-    if (
-        distances.length <
-        3
-    ) {
-        state.distanceZScore =
-            null;
-
-        return;
+                    referencePrice -
+                    state.strikePrice
+                ) /
+                state.strikePrice
+            ) *
+            100;
     }
 
-    const mean =
-        average(
-            distances
-        );
-
-    const deviation =
-        standardDeviation(
-            distances
-        );
-
     if (
-        mean ===
-            null ||
-        deviation ===
-            null ||
-        deviation ===
+        state.strikeDistancePct !==
+            null &&
+        state.volatility3m !==
+            null &&
+        state.volatility3m !==
             0
     ) {
         state.distanceZScore =
+            state.strikeDistancePct /
+            state.volatility3m;
+    } else {
+        state.distanceZScore =
             null;
-
-        return;
     }
 
-    state.distanceZScore =
-        (
-            state.strikeDistance -
-            mean
-        ) /
-        deviation;
-}
+    const qualityParts =
+        [
+            state.btcPrice !==
+                null
+                ? 1
+                : 0,
 
-function calculateDataQuality() {
-    const qualityParts = [
-        state.btcPrice !==
-            null
-            ? 1
-            : 0,
+            state.btcIndexPrice !==
+                null &&
+            !state.btcIndexStale
+                ? 1
+                : 0,
 
-        state.btcIndexPrice !==
-            null &&
-        !state.btcIndexStale
-            ? 1
-            : 0,
+            state.momentum1m !==
+                null
+                ? 1
+                : 0,
 
-        state.momentum1m !==
-            null
-            ? 1
-            : 0,
+            state.momentum3m !==
+                null
+                ? 1
+                : 0,
 
-        state.momentum3m !==
-            null
-            ? 1
-            : 0,
+            state.volatility1m !==
+                null
+                ? 1
+                : 0,
 
-        state.volatility1m !==
-            null
-            ? 1
-            : 0,
+            state.orderBookImbalance !==
+                null
+                ? 1
+                : 0,
 
-        state.orderBookImbalance !==
-            null
-            ? 1
-            : 0,
-
-        state.tradeFlow !==
-            null
-            ? 1
-            : 0
-    ];
+            state.tradeFlow !==
+                null
+                ? 1
+                : 0
+        ];
 
     state.dataQuality =
         (
@@ -3065,268 +3476,17 @@ function calculateDataQuality() {
         100;
 }
 
-async function collectMarketData() {
-    try {
-        const [
-            index,
-            ticker,
-            book,
-            trades
-        ] =
-            await Promise.all([
-                getBTCIndex(),
-                getBTCPerpTicker(),
-                getBTCBook(),
-                getBTCTrades()
-            ]);
-
-        if (ticker) {
-            state.btcPrice =
-                ticker.last;
-
-            state.lastUpdate =
-                ticker.timestamp ||
-                now();
-
-            if (
-                state.btcPrice !==
-                    null
-            ) {
-                priceHistory.push({
-                    timestamp:
-                        now(),
-
-                    price:
-                        state.btcPrice
-                });
-            }
-        }
-
-        if (index) {
-            state.btcIndexPrice =
-                index.price;
-
-            state.btcIndexTimestamp =
-                index.timestamp ||
-                now();
-
-            state.btcIndexSource =
-                index.source ||
-                null;
-
-            state.btcIndexAgeMs =
-                Math.max(
-                    0,
-                    now() -
-                        state.btcIndexTimestamp
-                );
-
-            state.btcIndexStale =
-                state.btcIndexAgeMs >
-                CONFIG.maxIndexAgeMs;
-        } else {
-            state.btcIndexPrice =
-                null;
-
-            state.btcIndexTimestamp =
-                null;
-
-            state.btcIndexSource =
-                null;
-
-            state.btcIndexAgeMs =
-                null;
-
-            state.btcIndexStale =
-                true;
-        }
-
-        if (book) {
-            const imbalance =
-                calculateOrderBookImbalance(
-                    book
-                );
-
-            state.orderBookImbalance =
-                imbalance;
-
-            orderBookHistory.push({
-                timestamp:
-                    now(),
-
-                imbalance
-            });
-        }
-
-        if (
-            Array.isArray(
-                trades
-            )
-        ) {
-            for (
-                const trade of
-                    trades
-            ) {
-                const timestamp =
-                    safeNumber(
-                        trade.t ||
-                            trade.timestamp
-                    ) ||
-                    now();
-
-                const price =
-                    safeNumber(
-                        trade.p ||
-                            trade.price
-                    );
-
-                const quantity =
-                    safeNumber(
-                        trade.q ||
-                            trade.quantity
-                    );
-
-                const side =
-                    trade.s ||
-                    trade.side ||
-                    null;
-
-                if (
-                    price !==
-                        null &&
-                    quantity !==
-                        null
-                ) {
-                    tradeHistory.push({
-                        timestamp,
-                        price,
-                        quantity,
-                        side
-                    });
-                }
-            }
-        }
-
-        state.tradeFlow =
-            calculateTradeFlow(
-                trades
-            );
-
-        state.momentum1m =
-            calculateMomentum(
-                60 *
-                    1000
-            );
-
-        state.momentum3m =
-            calculateMomentum(
-                3 *
-                    60 *
-                    1000
-            );
-
-        state.momentum5m =
-            calculateMomentum(
-                5 *
-                    60 *
-                    1000
-            );
-
-        state.volatility1m =
-            calculateVolatility(
-                60 *
-                    1000
-            );
-
-        state.volatility3m =
-            calculateVolatility(
-                3 *
-                    60 *
-                    1000
-            );
-
-        state.vwap =
-            calculateVWAP(
-                5 *
-                    60 *
-                    1000
-            );
-
-        if (
-            state.btcPrice !==
-                null &&
-            previousPrice !==
-                null
-        ) {
-            state.velocity =
-                state.btcPrice -
-                previousPrice;
-        } else {
-            state.velocity =
-                null;
-        }
-
-        if (
-            state.velocity !==
-                null &&
-            previousVelocity !==
-                null
-        ) {
-            state.acceleration =
-                state.velocity -
-                previousVelocity;
-        } else {
-            state.acceleration =
-                null;
-        }
-
-        previousVelocity =
-            state.velocity;
-
-        previousPrice =
-            state.btcPrice;
-
-        calculateDistanceMetrics();
-        calculateDataQuality();
-
-        while (
-            priceHistory.length >
-            CONFIG.maxPriceHistory
-        ) {
-            priceHistory.shift();
-        }
-
-        while (
-            tradeHistory.length >
-            CONFIG.maxTradeHistory
-        ) {
-            tradeHistory.shift();
-        }
-
-        while (
-            orderBookHistory.length >
-            CONFIG.maxOrderBookHistory
-        ) {
-            orderBookHistory.shift();
-        }
-    } catch (error) {
-        console.error(
-            "[ODIN] Market-data collection error:",
-            error.message
-        );
-    }
-}
-
 function startNewRound() {
-    if (!currentContract) {
+    if (
+        !currentContract
+    ) {
         return;
     }
 
     const expiry =
         safeNumber(
             currentContract.instrument
-                ?.expiry_timestamp_ms ||
-                currentContract.expiry
+                .expiry_timestamp_ms
         );
 
     if (
@@ -3349,46 +3509,69 @@ function startNewRound() {
         return;
     }
 
-    currentRound = {
-        id,
+    currentRound =
+        {
+            id,
 
-        startedAt:
-            now(),
+            startedAt:
+                now(),
 
-        expiry,
+            expiry,
 
-        symbol:
-            currentContract.instrument
-                ?.symbol ||
-            null,
+            symbol:
+                currentContract
+                    .instrument
+                    .symbol ||
+                null,
 
-        strike:
-            currentContract.strike,
+            strike:
+                currentContract.strike,
 
-        strikeIndex:
-            currentContract.strikeIndex,
+            strikeIndex:
+                currentContract.strikeIndex,
 
-        operator:
-            currentContract.operator,
+            operator:
+                currentContract.operator,
 
-        forecast:
-            null,
+            forecast:
+                null,
 
-        forecastProbability:
-            null,
+            forecastProbability:
+                null,
 
-        confidence:
-            null,
+            confidence:
+                null,
 
-        forecastReason:
-            null,
+            forecastMade:
+                false,
 
-        forecastMade:
-            false,
+            forecastLocked:
+                false,
 
-        result:
-            null
-    };
+            lockedForecast:
+                null,
+
+            lockedProbability:
+                null,
+
+            lockedConfidence:
+                null,
+
+            lockedAt:
+                null,
+
+            stabilityDirection:
+                null,
+
+            stabilityCount:
+                0,
+
+            lastCandidateProbability:
+                null,
+
+            result:
+                null
+        };
 
     state.activeRoundId =
         id;
@@ -3396,23 +3579,46 @@ function startNewRound() {
     state.collectionStartedAt =
         now();
 
+    state.forecastLocked =
+        false;
+
+    state.lockedForecast =
+        null;
+
+    state.lockedProbability =
+        null;
+
+    state.lockedConfidence =
+        null;
+
+    state.lockedAt =
+        null;
+
+    state.lockedContractSymbol =
+        currentRound.symbol;
+
+    state.lockedContractExpiry =
+        currentRound.expiry;
+
+    state.paperEmergency =
+        false;
+
+    state.paperEmergencyReason =
+        null;
+
     state.phase =
         "COLLECTING";
 
-    state.forecast =
-        "WAIT";
-
-    state.forecastProbability =
-        null;
-
-    state.forecastConfidence =
-        null;
-
-    state.forecastReason =
-        null;
-
     console.log(
         `[ODIN] Started paper round ${id}`
+    );
+
+    console.log(
+        `[ODIN] Collecting BTC data for ${CONFIG.collectionSeconds} seconds before prediction`
+    );
+
+    subscribeDCMSettlement(
+        currentRound.symbol
     );
 }
 
@@ -3426,25 +3632,11 @@ function calculateForecast() {
         state.forecast =
             "WAIT";
 
-        state.forecastReason =
-            "Waiting for a current BTC 15-minute Strike Option contract.";
+        state.forecastProbability =
+            null;
 
-        return;
-    }
-
-    resolveCurrentContract();
-
-    if (
-        !currentContract
-    ) {
-        state.phase =
-            "WAITING";
-
-        state.forecast =
-            "WAIT";
-
-        state.forecastReason =
-            "Waiting for a current BTC 15-minute Strike Option contract.";
+        state.forecastConfidence =
+            null;
 
         return;
     }
@@ -3454,49 +3646,32 @@ function calculateForecast() {
     if (
         !currentRound
     ) {
-        state.phase =
-            "WAITING";
-
-        state.forecast =
-            "WAIT";
-
         return;
     }
 
     if (
-        currentRound.forecastMade
+        currentRound.forecastLocked
     ) {
+        state.phase =
+            "LOCKED";
+
         state.forecast =
-            currentRound.forecast ||
-            "WAIT";
+            currentRound.lockedForecast;
 
         state.forecastProbability =
-            currentRound.forecastProbability;
+            currentRound.lockedProbability;
 
         state.forecastConfidence =
-            currentRound.confidence;
-
-        state.forecastReason =
-            currentRound.forecastReason;
-
-        state.phase =
-            currentRound.forecast ===
-            "SIT OUT"
-                ? "SIT_OUT"
-                : "LOCKED";
+            currentRound.lockedConfidence;
 
         return;
     }
 
-    const elapsedSeconds =
-        (
-            now() -
-            currentRound.startedAt
-        ) /
-        1000;
+    const elapsed =
+        secondsSinceRoundStart();
 
     if (
-        elapsedSeconds <
+        elapsed <
         CONFIG.collectionSeconds
     ) {
         state.phase =
@@ -3511,281 +3686,142 @@ function calculateForecast() {
         state.forecastConfidence =
             null;
 
-        state.forecastReason =
-            `Collecting market data... ${Math.max(
-                0,
-                Math.ceil(
-                    CONFIG.collectionSeconds -
-                        elapsedSeconds
-                )
-            )}s remaining.`;
+        return;
+    }
+
+    if (
+        !checkDataIntegrity()
+    ) {
+        state.phase =
+            "DATA_WARNING";
+
+        state.forecast =
+            "WAIT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        return;
+    }
+
+    if (
+        state.btcPrice ===
+            null ||
+        state.strikePrice ===
+            null
+    ) {
+        state.phase =
+            "WAITING";
+
+        state.forecast =
+            "WAIT";
+
+        console.log(
+            "[ODIN] Forecast waiting: BTC price or strike price unavailable"
+        );
 
         return;
     }
 
     state.phase =
-        "READY";
-
-    /*
-     * A forecast must have a fresh index and a verified strike.
-     *
-     * IMPORTANT:
-     * The DCM index is the authoritative reference for Strike
-     * Options. Do not silently substitute the Exchange index for
-     * a forecast that is supposed to be evaluated against the
-     * Strike Option's underlying.
-     */
-    if (
-        state.btcIndexPrice ===
-            null ||
-        state.btcIndexStale ||
-        state.btcIndexSource !==
-            "DCM_INDEX" &&
-        state.btcIndexSource !==
-            "EXCHANGE_INDEX_FALLBACK" ||
-        state.strikePrice ===
-            null
-    ) {
-        state.phase =
-            "SIT_OUT";
-
-        state.forecast =
-            "SIT OUT";
-
-        state.forecastProbability =
-            50;
-
-        state.forecastConfidence =
-            0;
-
-        state.forecastReason =
-            "SIT OUT: Odin does not have the authoritative current BTC index and verified strike needed to evaluate this round.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
-            50;
-
-        currentRound.confidence =
-            0;
-
-        currentRound.forecastReason =
-            state.forecastReason;
-
-        currentRound.forecastMade =
-            true;
-
-        return;
-    }
-
-    const signals = [];
-
-    if (
-        state.strikeDistancePct !==
-            null
-    ) {
-        signals.push({
-            name:
-                "strikeDistance",
-
-            value:
-                state.strikeDistancePct,
-
-            weight:
-                4
-        });
-    }
-
-    if (
-        state.momentum1m !==
-            null
-    ) {
-        signals.push({
-            name:
-                "momentum1m",
-
-            value:
-                state.momentum1m,
-
-            weight:
-                8
-        });
-    }
-
-    if (
-        state.momentum3m !==
-            null
-    ) {
-        signals.push({
-            name:
-                "momentum3m",
-
-            value:
-                state.momentum3m,
-
-            weight:
-                4
-        });
-    }
-
-    if (
-        state.momentum5m !==
-            null
-    ) {
-        signals.push({
-            name:
-                "momentum5m",
-
-            value:
-                state.momentum5m,
-
-            weight:
-                2
-        });
-    }
-
-    if (
-        state.orderBookImbalance !==
-            null
-    ) {
-        signals.push({
-            name:
-                "orderBook",
-
-            value:
-                state.orderBookImbalance,
-
-            weight:
-                20
-        });
-    }
-
-    if (
-        state.tradeFlow !==
-            null
-    ) {
-        signals.push({
-            name:
-                "tradeFlow",
-
-            value:
-                state.tradeFlow,
-
-            weight:
-                20
-        });
-    }
-
-    if (
-        state.acceleration !==
-            null
-    ) {
-        signals.push({
-            name:
-                "acceleration",
-
-            value:
-                state.acceleration,
-
-            weight:
-                2
-        });
-    }
+        "FORECASTING";
 
     let score =
         0;
 
+    /*
+     * Paper-model scoring only.
+     */
+
     if (
         state.strikeDistancePct !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.strikeDistancePct *
-            4;
+                4,
+            -40,
+            40
+        );
     }
 
     if (
         state.momentum1m !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.momentum1m *
-            8;
+                8,
+            -20,
+            20
+        );
     }
 
     if (
         state.momentum3m !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.momentum3m *
-            4;
+                4,
+            -20,
+            20
+        );
     }
 
     if (
         state.momentum5m !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.momentum5m *
-            2;
+                2,
+            -10,
+            10
+        );
     }
 
     if (
         state.orderBookImbalance !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.orderBookImbalance *
-            20;
+                20,
+            -10,
+            10
+        );
     }
 
     if (
         state.tradeFlow !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.tradeFlow *
-            20;
+                20,
+            -10,
+            10
+        );
     }
 
     if (
         state.acceleration !==
-            null
+        null
     ) {
-        score +=
+        score += clamp(
             state.acceleration *
-            2;
-    }
-
-    if (
-        state.vwap !==
-            null &&
-        state.btcIndexPrice !==
-            null
-    ) {
-        const vwapBias =
-            calculateReturns(
-                state.btcIndexPrice,
-                state.vwap
-            );
-
-        if (
-            vwapBias !==
-            null
-        ) {
-            score +=
-                vwapBias *
-                3;
-        }
+                2,
+            -5,
+            5
+        );
     }
 
     state.modelScore =
         score;
-
-    const signalCount =
-        signals.length;
 
     const probability =
         clamp(
@@ -3808,52 +3844,73 @@ function calculateForecast() {
         confidence;
 
     if (
-        signalCount <
-            CONFIG.minimumForecastSignals ||
         confidence <
-            CONFIG.minimumForecastConfidence
+        CONFIG.minimumForecastConfidence
     ) {
-        state.phase =
-            "SIT_OUT";
+        currentRound.stabilityDirection =
+            null;
 
-        state.forecast =
-            "SIT OUT";
+        currentRound.stabilityCount =
+            0;
 
-        state.forecastReason =
-            "SIT OUT: The collected directional evidence did not clear Odin's minimum confidence requirement.";
-
-        currentRound.forecast =
-            "SIT OUT";
-
-        currentRound.forecastProbability =
+        currentRound.lastCandidateProbability =
             probability;
 
-        currentRound.confidence =
-            confidence;
+        state.forecast =
+            "WAIT";
 
-        currentRound.forecastReason =
-            state.forecastReason;
+        state.phase =
+            "FORECASTING";
 
-        currentRound.forecastMade =
-            true;
+        console.log(
+            `[ODIN] Paper forecast remains WAIT | Confidence ${confidence.toFixed(2)}% is below stability threshold`
+        );
 
         return;
     }
 
-    state.forecast =
+    const candidate =
         probability >=
         50
             ? "YES"
             : "NO";
 
-    state.phase =
-        "LOCKED";
+    if (
+        currentRound.stabilityDirection ===
+        candidate
+    ) {
+        currentRound.stabilityCount +=
+            1;
+    } else {
+        currentRound.stabilityDirection =
+            candidate;
 
-    state.forecastReason =
-        "Directional evidence cleared Odin's minimum confidence threshold after the full data collection.";
+        currentRound.stabilityCount =
+            1;
+    }
+
+    currentRound.lastCandidateProbability =
+        probability;
+
+    state.forecast =
+        "WAIT";
+
+    if (
+        currentRound.stabilityCount <
+        CONFIG.forecastStabilityRequired
+    ) {
+        state.phase =
+            "FORECASTING";
+
+        console.log(
+            `[ODIN] Candidate ${candidate} | Stability ${currentRound.stabilityCount}/${CONFIG.forecastStabilityRequired} | Probability: ${probability.toFixed(2)}%`
+        );
+
+        return;
+    }
 
     currentRound.forecast =
-        state.forecast;
+        candidate;
 
     currentRound.forecastProbability =
         probability;
@@ -3861,194 +3918,340 @@ function calculateForecast() {
     currentRound.confidence =
         confidence;
 
-    currentRound.forecastReason =
-        state.forecastReason;
-
     currentRound.forecastMade =
         true;
 
+    currentRound.forecastLocked =
+        true;
+
+    currentRound.lockedForecast =
+        candidate;
+
+    currentRound.lockedProbability =
+        probability;
+
+    currentRound.lockedConfidence =
+        confidence;
+
+    currentRound.lockedAt =
+        now();
+
+    state.forecast =
+        candidate;
+
+    state.forecastProbability =
+        probability;
+
+    state.forecastConfidence =
+        confidence;
+
+    state.forecastLocked =
+        true;
+
+    state.lockedForecast =
+        candidate;
+
+    state.lockedProbability =
+        probability;
+
+    state.lockedConfidence =
+        confidence;
+
+    state.lockedAt =
+        currentRound.lockedAt;
+
+    state.lockedContractSymbol =
+        currentRound.symbol;
+
+    state.lockedContractExpiry =
+        currentRound.expiry;
+
+    state.phase =
+        "LOCKED";
+
     console.log(
-        `[ODIN] Paper forecast ${state.forecast} | probability ${probability.toFixed(
-            1
-        )}% | confidence ${confidence.toFixed(
-            1
-        )}% | score ${score.toFixed(
-            3
-        )}`
+        `[ODIN] PAPER FORECAST LOCKED | ${candidate} | Probability: ${probability.toFixed(2)}% | Confidence: ${confidence.toFixed(2)}% | Contract: ${currentRound.symbol} | Stability: ${currentRound.stabilityCount}/${CONFIG.forecastStabilityRequired}`
     );
 }
 
-function updateContractState() {
-    resolveCurrentContract();
-
+function resolveCurrentContract() {
     if (
-        !currentContract
+        !instruments.length
     ) {
-        state.secondsRemaining =
+        currentContract =
             null;
 
         return;
     }
 
-    const expiry =
-        safeNumber(
-            currentContract.expiry
-        );
+    /*
+     * Once a round exists, preserve the exact contract.
+     */
 
     if (
-        expiry ===
-            null
+        currentRound &&
+        currentRound.symbol
     ) {
-        state.secondsRemaining =
-            null;
-
-        return;
-    }
-
-    state.secondsRemaining =
-        Math.max(
-            0,
-            Math.floor(
+        const lockedInstrument =
+            instruments.find(
                 (
-                    expiry -
-                    now()
-                ) /
-                1000
-            )
-        );
-
-    state.contractBid =
-        safeNumber(
-            currentContract.bid
-        );
-
-    state.contractAsk =
-        safeNumber(
-            currentContract.ask
-        );
-
-    state.contractMid =
-        safeNumber(
-            currentContract.mid
-        );
-
-    if (
-        state.contractMid !==
-            null
-    ) {
-        state.marketProbability =
-            clamp(
-                state.contractMid *
-                    100,
-                0,
-                100
-            );
-    } else {
-        state.marketProbability =
-            null;
-    }
-}
-
-function buildPublicState() {
-    const currentTime = now();
-    const collectionTotalSeconds =
-        CONFIG.collectionSeconds;
-
-    let collectionElapsed = null;
-    let collectionRemaining = null;
-
-    if (currentRound) {
-        const startedAt =
-            safeNumber(currentRound.startedAt);
-
-        if (startedAt !== null) {
-            collectionElapsed = Math.max(
-                0,
-                Math.floor(
-                    (currentTime - startedAt) / 1000
-                )
+                    instrument
+                ) =>
+                    instrument.symbol ===
+                    currentRound.symbol &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) !== null &&
+                    safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ) >
+                        now()
             );
 
-            collectionRemaining = Math.max(
-                0,
-                collectionTotalSeconds - collectionElapsed
+        if (
+            lockedInstrument
+        ) {
+            currentContract =
+                {
+                    instrument:
+                        lockedInstrument,
+
+                    expiry:
+                        safeNumber(
+                            lockedInstrument
+                                .expiry_timestamp_ms
+                        ),
+
+                    strike:
+                        extractStrikePrice(
+                            lockedInstrument
+                        ),
+
+                    strikeIndex:
+                        getStrikeIndex(
+                            lockedInstrument
+                        ),
+
+                    operator:
+                        getStrikeOperator(
+                            lockedInstrument
+                        )
+                };
+
+            state.contractSymbol =
+                lockedInstrument.symbol ||
+                null;
+
+            state.contractExpiry =
+                safeNumber(
+                    lockedInstrument
+                        .expiry_timestamp_ms
+                );
+
+            state.strikePrice =
+                currentContract.strike;
+
+            state.secondsRemaining =
+                state.contractExpiry !==
+                    null
+                    ? Math.max(
+                          0,
+                          (
+                              state.contractExpiry -
+                              now()
+                          ) /
+                              1000
+                      )
+                    : null;
+
+            state.activeRoundId =
+                createRoundId(
+                    state.contractExpiry
+                );
+
+            state.lockedContractSymbol =
+                currentRound.symbol;
+
+            state.lockedContractExpiry =
+                currentRound.expiry;
+
+            subscribeDCMSettlement(
+                lockedInstrument.symbol
             );
+
+            return;
         }
     }
 
-    const wins = completedRounds.filter(
-        (round) => round.result === "WIN"
-    ).length;
+    const selected =
+        selectCurrentContract(
+            instruments
+        );
 
-    const losses = completedRounds.filter(
-        (round) => round.result === "LOSS"
-    ).length;
+    if (
+        !selected
+    ) {
+        currentContract =
+            null;
 
-    const total = wins + losses;
-
-    return {
-        ...state,
-
-        serverTime: currentTime,
-
-        contractExpiry:
-            state.contractExpiry
-                ? formatTimestamp(state.contractExpiry)
-                : null,
-
-        collectionStartedAt:
-            state.collectionStartedAt
-                ? formatTimestamp(state.collectionStartedAt)
-                : null,
-
-        collectionElapsed,
-        collectionRemaining,
-        collectionTotalSeconds,
-        forecastMade:
-            Boolean(currentRound?.forecastMade),
-
-        performance: {
-            wins,
-            losses,
-            total,
-            accuracy:
-                total > 0
-                    ? (wins / total) * 100
-                    : null
-        },
-
-        recentRounds:
-            completedRounds.slice(-20).reverse(),
-
-        lastUpdate:
-            state.lastUpdate
-                ? formatTimestamp(state.lastUpdate)
-                : null
-    };
-}
-
-function pushCompletedRound(
-    round
-) {
-    if (!round) {
         return;
     }
 
+    currentContract =
+        selected;
+
+    const instrument =
+        currentContract.instrument;
+
+    state.contractSymbol =
+        instrument.symbol ||
+        null;
+
+    state.contractExpiry =
+        safeNumber(
+            instrument.expiry_timestamp_ms
+        );
+
+    state.strikePrice =
+        currentContract.strike;
+
+    state.secondsRemaining =
+        state.contractExpiry !==
+            null
+            ? Math.max(
+                  0,
+                  (
+                      state.contractExpiry -
+                      now()
+                  ) /
+                      1000
+              )
+            : null;
+
+    state.activeRoundId =
+        createRoundId(
+            state.contractExpiry
+        );
+
+    subscribeDCMSettlement(
+        instrument.symbol
+    );
+
+    console.log(
+        `[ODIN] Fresh paper contract selected: ${instrument.symbol}`
+    );
+}
+
+function evaluateExpiredRound() {
     if (
-        completedRounds.some(
-            (
-                existing
-            ) =>
-                existing.id ===
-                round.id
-        )
+        !currentRound ||
+        currentRound.result
     ) {
         return;
     }
 
-    completedRounds.push(
-        round
-    );
+    if (
+        !currentRound.forecastMade
+    ) {
+        return;
+    }
+
+    if (
+        state.secondsRemaining >
+        0
+    ) {
+        return;
+    }
+
+    if (
+        state.btcIndexPrice ===
+            null &&
+        state.btcPrice ===
+            null
+    ) {
+        return;
+    }
+
+    if (
+        currentRound.strike ===
+        null
+    ) {
+        return;
+    }
+
+    /*
+     * Prefer the DCM settlement channel when it has
+     * a matching contract result. Otherwise use the
+     * current CDNA index value.
+     */
+
+    const settlementPrice =
+        dcmSettlementCache &&
+        dcmSettlementCache.symbol ===
+            currentRound.symbol
+            ? safeNumber(
+                  dcmSettlementCache.price
+              )
+            : null;
+
+    const finalPrice =
+        settlementPrice !==
+        null
+            ? settlementPrice
+            : state.btcIndexPrice !==
+              null
+                ? state.btcIndexPrice
+                : state.btcPrice;
+
+    const above =
+        finalPrice >
+        currentRound.strike;
+
+    let result =
+        "UNKNOWN";
+
+    if (
+        currentRound.forecast ===
+        "YES"
+    ) {
+        result =
+            above
+                ? "WIN"
+                : "LOSS";
+    } else if (
+        currentRound.forecast ===
+        "NO"
+    ) {
+        result =
+            above
+                ? "LOSS"
+                : "WIN";
+    } else {
+        result =
+            "PASS";
+    }
+
+    currentRound.finalPrice =
+        finalPrice;
+
+    currentRound.result =
+        result;
+
+    currentRound.resolvedAt =
+        now();
+
+    currentRound.settlementSource =
+        settlementPrice !==
+        null
+            ? "DCM_SETTLEMENT"
+            : state.btcIndexPrice !==
+              null
+                ? "BTC_INDEX"
+                : "BTC_PERP_FALLBACK";
+
+    completedRounds.push({
+        ...currentRound
+    });
 
     while (
         completedRounds.length >
@@ -4057,274 +4260,259 @@ function pushCompletedRound(
         completedRounds.shift();
     }
 
-    savePersistentRecords();
-}
-
-function determineRoundResult(
-    round,
-    settlementPrice
-) {
-    if (
-        !round ||
-        settlementPrice ===
-            null ||
-        round.strike ===
-            null
-    ) {
-        return null;
-    }
-
-    if (
-        round.forecast !==
-            "YES" &&
-        round.forecast !==
-            "NO"
-    ) {
-        return null;
-    }
-
-    const yesResult =
-        settlementPrice >
-        round.strike;
-
-    if (
-        round.forecast ===
-        "YES"
-    ) {
-        return yesResult
-            ? "WIN"
-            : "LOSS";
-    }
-
-    return !yesResult
-        ? "WIN"
-        : "LOSS";
-}
-
-function resolveCompletedRound(
-    settlementPrice,
-    settlementTimestamp
-) {
-    if (
-        !currentRound ||
-        currentRound.result ||
-        !currentRound.forecastMade
-    ) {
-        return;
-    }
-
-    const expiry =
-        safeNumber(
-            currentRound.expiry
-        );
-
-    if (
-        expiry ===
-            null
-    ) {
-        return;
-    }
-
-    if (
-        now() <
-        expiry
-    ) {
-        return;
-    }
-
-    const result =
-        determineRoundResult(
-            currentRound,
-            settlementPrice
-        );
-
-    if (
-        !result
-    ) {
-        return;
-    }
-
-    currentRound.result =
-        result;
-
-    currentRound.settlementPrice =
-        settlementPrice;
-
-    currentRound.settlementTimestamp =
-        settlementTimestamp ||
-        now();
-
-    currentRound.resolvedAt =
-        now();
-
-    recordOfficialResult(
-        currentRound
-    );
-
-    pushCompletedRound(
-        currentRound
-    );
-
     console.log(
-        `[ODIN] Round ${currentRound.id} resolved: ${result}`
+        `[ODIN] Round ${currentRound.id} resolved: ${result} | Final Price: ${finalPrice} | Strike: ${currentRound.strike} | Source: ${currentRound.settlementSource}`
     );
+
+    currentRound =
+        null;
+
+    currentContract =
+        null;
+
+    dcmSubscribedContractSymbol =
+        null;
+
+    dcmSettlementCache =
+        null;
+
+    state.forecast =
+        "WAIT";
+
+    state.forecastProbability =
+        null;
+
+    state.forecastConfidence =
+        null;
+
+    state.forecastLocked =
+        false;
+
+    state.lockedForecast =
+        null;
+
+    state.lockedProbability =
+        null;
+
+    state.lockedConfidence =
+        null;
+
+    state.lockedAt =
+        null;
+
+    state.lockedContractSymbol =
+        null;
+
+    state.lockedContractExpiry =
+        null;
+
+    state.activeRoundId =
+        null;
+
+    state.phase =
+        "WAITING";
 }
 
-function processSettlementCache() {
-    if (
-        !dcmSettlementCache
-    ) {
-        return;
-    }
-
-    const price =
-        safeNumber(
-            dcmSettlementCache.price
+function getPerformance() {
+    const resolved =
+        completedRounds.filter(
+            (
+                round
+            ) =>
+                round.result ===
+                    "WIN" ||
+                round.result ===
+                    "LOSS"
         );
 
-    const timestamp =
-        safeNumber(
-            dcmSettlementCache.timestamp
-        );
+    const wins =
+        resolved.filter(
+            (
+                round
+            ) =>
+                round.result ===
+                "WIN"
+        ).length;
 
-    if (
-        price ===
-            null
-    ) {
-        return;
-    }
+    const losses =
+        resolved.filter(
+            (
+                round
+            ) =>
+                round.result ===
+                "LOSS"
+        ).length;
 
-    if (
-        !currentRound
-    ) {
-        return;
-    }
+    const total =
+        wins +
+        losses;
 
-    if (
-        dcmSettlementCache.symbol &&
-        currentRound.symbol &&
-        dcmSettlementCache.symbol !==
-            currentRound.symbol
-    ) {
-        return;
-    }
+    return {
+        wins,
 
-    resolveCompletedRound(
-        price,
-        timestamp
-    );
+        losses,
+
+        total,
+
+        accuracy:
+            total > 0
+                ? (
+                      wins /
+                      total
+                  ) *
+                  100
+                : null
+    };
 }
 
-function resolveExpiredRoundFromIndex() {
-    if (
-        !currentRound ||
-        currentRound.result ||
-        !currentRound.forecastMade
-    ) {
-        return;
-    }
+function serializeState() {
+    const remaining =
+        state.contractExpiry !==
+        null
+            ? Math.max(
+                  0,
+                  (
+                      state.contractExpiry -
+                      now()
+                  ) /
+                      1000
+              )
+            : null;
 
-    const expiry =
-        safeNumber(
-            currentRound.expiry
-        );
+    state.secondsRemaining =
+        remaining;
 
-    if (
-        expiry ===
-            null ||
-        now() <
-            expiry
-    ) {
-        return;
-    }
+    return {
+        ...state,
 
-    /*
-     * Never use a stale or unrelated price as an official
-     * settlement value. The settlement websocket is preferred.
-     */
-    if (
-        dcmSettlementCache &&
-        safeNumber(
-            dcmSettlementCache.price
-        ) !==
-            null &&
-        (
-            !dcmSettlementCache.symbol ||
-            !currentRound.symbol ||
-            dcmSettlementCache.symbol ===
-                currentRound.symbol
-        )
-    ) {
-        resolveCompletedRound(
-            safeNumber(
-                dcmSettlementCache.price
+        contractExpiryISO:
+            formatTimestamp(
+                state.contractExpiry
             ),
-            safeNumber(
-                dcmSettlementCache.timestamp
-            )
-        );
-    }
+
+        contractExpiryMs:
+            state.contractExpiry,
+
+        roundEndsAtISO:
+            formatTimestamp(
+                state.contractExpiry
+            ),
+
+        roundEndsAtMs:
+            state.contractExpiry,
+
+        roundRemaining:
+            remaining,
+
+        lockedAtISO:
+            formatTimestamp(
+                state.lockedAt
+            ),
+
+        lockedContractExpiryISO:
+            formatTimestamp(
+                state.lockedContractExpiry
+            ),
+
+        collectionElapsed:
+            currentRound
+                ? secondsSinceRoundStart()
+                : 0,
+
+        collectionRemaining:
+            currentRound
+                ? Math.max(
+                      0,
+                      CONFIG.collectionSeconds -
+                          secondsSinceRoundStart()
+                  )
+                : 0,
+
+        performance:
+            getPerformance(),
+
+        recentRounds:
+            completedRounds
+                .slice(
+                    -20
+                )
+                .reverse()
+    };
 }
 
-function updateRoundLifecycle() {
-    processSettlementCache();
-    resolveExpiredRoundFromIndex();
-
-    if (
-        currentRound &&
-        safeNumber(currentRound.expiry) !== null &&
-        now() >= currentRound.expiry
-    ) {
-        if (currentRound.result) {
-            console.log(
-                `[ODIN] Round ${currentRound.id} resolved: ${currentRound.result}`
-            );
-        } else if (!currentRound.forecastMade) {
-            console.log(
-                `[ODIN] Round ${currentRound.id} expired without a forecast; starting a fresh round.`
-            );
-        }
-
-        currentRound = null;
-        currentContract = null;
-
-        state.activeRoundId = null;
-        state.contractSymbol = null;
-        state.contractExpiry = null;
-        state.strikePrice = null;
-        state.secondsRemaining = null;
-        state.collectionStartedAt = null;
-        state.forecast = "WAIT";
-        state.forecastProbability = null;
-        state.forecastConfidence = null;
-        state.forecastReason =
-            "Previous 15-minute round ended. Loading the next contract.";
-        state.phase = "WAITING";
-    }
-}
-
-function updateStateLoop() {
-    updateContractState();
-
-    updateRoundLifecycle();
-
-    calculateForecast();
-
-    updateDailyState();
-
-    state.connected =
-        true;
-
-    state.serverTime =
+async function verifyDataSourcesAtRuntime() {
+    const startedAt =
         now();
 
-    io.emit(
-        "state",
-        buildPublicState()
-    );
+    try {
+        const [
+            index,
+            perp,
+            book,
+            trades
+        ] = await Promise.all([
+            getBTCIndex(),
+            getBTCPerpTicker(),
+            getBTCBook(),
+            getBTCTrades()
+        ]);
+
+        const bookOk =
+            Boolean(
+                book &&
+                calculateOrderBookMetrics(
+                    book
+                )
+            );
+
+        state.dataSourceHealth = {
+            ...(state.dataSourceHealth || {}),
+            dcmInstruments:
+                rawBinaryInstruments.length > 0,
+            btcIndex:
+                Boolean(
+                    index &&
+                    index.price !== null &&
+                    index.timestamp !== null
+                ),
+            btcPerp:
+                Boolean(
+                    perp &&
+                    perp.last !== null
+                ),
+            btcBook:
+                bookOk,
+            btcTrades:
+                Array.isArray(trades) &&
+                trades.length > 0,
+            verifiedStrikeContract:
+                Boolean(currentContract),
+            lastCheckedAt:
+                now()
+        };
+
+        console.log(
+            `[ODIN] DATA HEALTH | DCM instruments=${state.dataSourceHealth.dcmInstruments} | index=${state.dataSourceHealth.btcIndex} (${index?.source || "none"}) | perp=${state.dataSourceHealth.btcPerp} | book=${state.dataSourceHealth.btcBook} | trades=${state.dataSourceHealth.btcTrades} | verified20m=${state.dataSourceHealth.verifiedStrikeContract} | ${now() - startedAt}ms`
+        );
+
+        return state.dataSourceHealth;
+    } catch (error) {
+        console.error(
+            "[ODIN] DATA HEALTH CHECK FAILED:",
+            error.message
+        );
+
+        state.paperEmergency =
+            true;
+
+        state.paperEmergencyReason =
+            `data health check failed: ${error.message}`;
+
+        return null;
+    }
 }
 
-async function pollLoop() {
+async function poll() {
     if (
         pollInProgress
     ) {
@@ -4335,43 +4523,71 @@ async function pollLoop() {
         true;
 
     try {
+        const currentTime =
+            now();
+
         if (
-            now() -
+            currentTime -
                 lastInstrumentRefresh >=
             CONFIG.instrumentRefreshMs
         ) {
-            await refreshInstruments();
+            if (
+                !instrumentRefreshInProgress
+            ) {
+                lastInstrumentRefresh =
+                    currentTime;
 
-            lastInstrumentRefresh =
+                await refreshInstruments();
+            }
+        }
+
+        await collectMarketData();
+
+        if (
+            now() -
+                lastDataHealthCheck >=
+            CONFIG.dataHealthIntervalMs
+        ) {
+            lastDataHealthCheck =
                 now();
+
+            await verifyDataSourcesAtRuntime();
         }
 
         resolveCurrentContract();
 
-        await collectMarketData();
+        await collectContractData();
 
-        updateStateLoop();
+        calculateStateMetrics();
 
-        lastPoll =
+        calculateForecast();
+
+        evaluateExpiredRound();
+
+        state.secondsRemaining =
+            state.contractExpiry !==
+                null
+                ? Math.max(
+                      0,
+                      (
+                          state.contractExpiry -
+                          now()
+                      ) /
+                          1000
+                  )
+                : null;
+
+        state.serverTime =
             now();
-    } catch (error) {
-        console.error(
-            "[ODIN] Poll loop error:",
-            error.message
+
+        io.emit(
+            "odin:update",
+            serializeState()
         );
     } finally {
         pollInProgress =
             false;
     }
-}
-
-function sendInitialState(
-    socket
-) {
-    socket.emit(
-        "state",
-        buildPublicState()
-    );
 }
 
 app.get(
@@ -4390,14 +4606,23 @@ app.get(
     }
 );
 
+app.use(
+    express.static(
+        path.join(
+            __dirname,
+            "public"
+        )
+    )
+);
+
 app.get(
-    "/api/state",
+    "/api/status",
     (
         req,
         res
     ) => {
         res.json(
-            buildPublicState()
+            serializeState()
         );
     }
 );
@@ -4412,8 +4637,98 @@ app.get(
             rounds:
                 completedRounds,
 
-            dailyRecords:
-                dailyRecords
+            performance:
+                getPerformance()
+        });
+    }
+);
+
+app.get(
+    "/api/instruments",
+    (
+        req,
+        res
+    ) => {
+        res.json({
+            count:
+                instruments.length,
+
+            instruments:
+                instruments
+                    .map(
+                        normalizeInstrument
+                    )
+                    .sort(
+                        (
+                            a,
+                            b
+                        ) =>
+                            a.expiry -
+                            b.expiry
+                    )
+        });
+    }
+);
+
+app.get(
+    "/api/instruments/raw",
+    (
+        req,
+        res
+    ) => {
+        res.json({
+            count:
+                rawBinaryInstruments.length,
+
+            instruments:
+                rawBinaryInstruments
+        });
+    }
+);
+
+app.get(
+    "/api/data-health",
+    (req, res) => {
+        res.json({
+            checkedAt:
+                state.dataSourceHealth?.lastCheckedAt ||
+                null,
+            health:
+                state.dataSourceHealth ||
+                null,
+            paperEmergency:
+                state.paperEmergency,
+            reason:
+                state.paperEmergencyReason
+        });
+    }
+);
+
+app.get(
+    "/api/health",
+    (
+        req,
+        res
+    ) => {
+        res.json({
+            status:
+                "online",
+
+            service:
+                "ODIN",
+
+            connected:
+                state.connected,
+
+            indexSource:
+                state.btcIndexSource,
+
+            indexStale:
+                state.btcIndexStale,
+
+            time:
+                new Date()
+                    .toISOString()
         });
     }
 );
@@ -4424,47 +4739,99 @@ io.on(
         socket
     ) => {
         console.log(
-            "[ODIN] Dashboard connected"
+            `[ODIN] Dashboard connected: ${socket.id}`
         );
 
-        sendInitialState(
-            socket
+        socket.emit(
+            "odin:update",
+            serializeState()
         );
 
         socket.on(
             "disconnect",
             () => {
                 console.log(
-                    "[ODIN] Dashboard disconnected"
+                    `[ODIN] Dashboard disconnected: ${socket.id}`
                 );
             }
         );
     }
 );
 
-loadPersistentRecords();
-
-updateDailyState();
-
-connectDCMMarketSocket();
-
-setInterval(
-    pollLoop,
-    CONFIG.pollIntervalMs
-);
-
-setInterval(
-    resetDailyDisplayIfNeeded,
-    1000
-);
-
-pollLoop();
-
 server.listen(
     PORT,
-    () => {
+    async () => {
+        console.log("");
+
         console.log(
-            `[ODIN] Server listening on port ${PORT}`
+            "=========================================="
+        );
+
+        console.log(
+            "          ODIN STRIKE OPTIONS BOT"
+        );
+
+        console.log(
+            "=========================================="
+        );
+
+        console.log(
+            `Server: http://localhost:${PORT}`
+        );
+
+        console.log(
+            "Mode: PAPER FORECASTING"
+        );
+
+        console.log(
+            "Market: BTC Strike Options"
+        );
+
+        console.log(
+            "Collection phase: 3 minutes"
+        );
+
+        console.log(
+            "Forecast lock: 3 consecutive signals"
+        );
+
+        console.log(
+            "Index: DCM/CDNA-funded BTC index"
+        );
+
+        console.log(
+            "=========================================="
+        );
+
+        console.log("");
+
+        await refreshInstruments();
+
+        /*
+         * The initial instrument refresh has now completed.
+         * Start the refresh timer from this point so the first
+         * poll does not immediately download all instruments again.
+         */
+
+        lastInstrumentRefresh =
+            now();
+
+        await verifyDataSourcesAtRuntime();
+
+        setInterval(
+            async () => {
+                try {
+                    await poll();
+                } catch (
+                    error
+                ) {
+                    console.error(
+                        "[ODIN] Poll error:",
+                        error.message
+                    );
+                }
+            },
+            CONFIG.pollIntervalMs
         );
     }
 );
