@@ -1017,9 +1017,14 @@ function subscribeDCMMarketChannel(
 }
 
 function connectDCMMarketSocket() {
+    if (dcmMarketSocketRetryTimer) {
+        clearTimeout(dcmMarketSocketRetryTimer);
+        dcmMarketSocketRetryTimer = null;
+    }
+
     dcmMarketSocket = null;
-    return;
 }
+
 
 async function getBTCIndex() {
     /*
@@ -1821,6 +1826,44 @@ function normalizeTimeValue(
     return numeric;
 }
 
+function parseDcmTimeValue(value) {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    const numeric = safeNumber(value);
+
+    if (numeric !== null) {
+        return numeric < 100000000000
+            ? numeric * 1000
+            : numeric;
+    }
+
+    const text = String(value).trim();
+
+    const match = text.match(
+        /^(\d{8})-(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
+    );
+
+    if (!match) {
+        return null;
+    }
+
+    const milliseconds = Number(
+        (match[5] || "0").padEnd(3, "0")
+    );
+
+    return Date.UTC(
+        Number(match[1].slice(0, 4)),
+        Number(match[1].slice(4, 6)) - 1,
+        Number(match[1].slice(6, 8)),
+        Number(match[2]),
+        Number(match[3]),
+        Number(match[4]),
+        milliseconds
+    );
+}
+
 function isFifteenMinuteStrikeInstrument(
     instrument
 ) {
@@ -1828,124 +1871,61 @@ function isFifteenMinuteStrikeInstrument(
         return false;
     }
 
-    const periodCode =
-        getPeriodCode(
-            instrument
-        );
-
-    if (
-        periodCode &&
-        [
-            "15M",
-            "M15",
-            "15MIN",
-            "15MINUTE",
-            "15MINUTES",
-            "15_MIN",
-            "15_MINUTES"
-        ].includes(
-            periodCode
-        )
-    ) {
-        return true;
-    }
-
     const attributes =
-        getInstrumentAttributes(
-            instrument
-        );
+        getInstrumentAttributes(instrument);
 
     const metadata =
-        getEventMetadata(
-            instrument
-        );
+        getEventMetadata(instrument);
 
-    const openCandidates = [
-        attributes?.OPEN_TIME,
-        attributes?.open_time,
-        metadata?.OPEN_TIME,
-        metadata?.open_time
-    ];
+    const openValue =
+        attributes?.OPEN_TIME ??
+        attributes?.open_time ??
+        metadata?.OPEN_TIME ??
+        metadata?.open_time ??
+        null;
 
-    const closeCandidates = [
-        attributes?.CLOSE_TIME,
-        attributes?.close_time,
-        metadata?.CLOSE_TIME,
-        metadata?.close_time
-    ];
+    const closeValue =
+        attributes?.CLOSE_TIME ??
+        attributes?.close_time ??
+        metadata?.CLOSE_TIME ??
+        metadata?.close_time ??
+        null;
 
-    for (
-        const openValue of
-            openCandidates
-    ) {
-        for (
-            const closeValue of
-                closeCandidates
-        ) {
-            const openTime =
-                normalizeTimeValue(
-                    openValue
-                );
+    const openTime =
+        parseDcmTimeValue(openValue);
 
-            const closeTime =
-                normalizeTimeValue(
-                    closeValue
-                );
-
-            if (
-                openTime !==
-                    null &&
-                closeTime !==
-                    null
-            ) {
-                const duration =
-                    closeTime -
-                    openTime;
-
-                if (
-                    Math.abs(
-                        duration -
-                            CONFIG.roundDurationMs
-                    ) <=
-                    1000
-                ) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    const text =
-        [
-            instrument.display_name,
-            instrument.symbol
-        ]
-            .filter(Boolean)
-            .join(" ")
-            .toUpperCase();
+    const closeTime =
+        parseDcmTimeValue(closeValue);
 
     if (
-        /(?:15\s*(?:MIN|MINUTE|MINUTES)|15M)\b/.test(
-            text
-        )
+        openTime !== null &&
+        closeTime !== null
     ) {
-        return true;
+        const duration =
+            closeTime - openTime;
+
+        const closeDate =
+            new Date(closeTime);
+
+        const isQuarterHour =
+            closeDate.getUTCMinutes() % 15 === 0 &&
+            closeDate.getUTCSeconds() === 0;
+
+        return (
+            Math.abs(
+                duration - CONFIG.roundDurationMs
+            ) <= 1000 &&
+            isQuarterHour
+        );
     }
 
-    /*
-     * Current DCM BTC 15-minute contracts observed by Odin use
-     * the intraday `I` symbol segment (for example
-     * NX.F.OPT.BTC.I.71.1.20260912). Use that only as a narrow
-     * fallback when the contract expires within the next 20 minutes,
-     * so an hourly/daily contract is never selected as Odin's round.
-     */
-    const symbolParts =
-        String(
-            instrument.symbol ||
-                ""
-        )
-            .toUpperCase()
-            .split(".");
+    // If DCM does not expose OPEN_TIME/CLOSE_TIME on this payload,
+    // only accept an intraday BTC contract whose actual expiry is on
+    // a quarter-hour boundary. Never accept an arbitrary "next 20 min"
+    // intraday contract because that is what previously produced 6:20,
+    // 6:35, etc. expiries.
+    const periodCode =
+        getPeriodCode(instrument);
 
     const expiry =
         safeNumber(
@@ -1953,17 +1933,17 @@ function isFifteenMinuteStrikeInstrument(
         );
 
     if (
-        symbolParts[4] ===
-            "I" &&
-        expiry !== null &&
-        expiry > now() &&
-        expiry -
-            now() <=
-            20 *
-            60 *
-            1000
+        periodCode === "I" &&
+        expiry !== null
     ) {
-        return true;
+        const expiryDate =
+            new Date(expiry);
+
+        return (
+            expiry > now() &&
+            expiryDate.getUTCMinutes() % 15 === 0 &&
+            expiryDate.getUTCSeconds() === 0
+        );
     }
 
     return false;
@@ -1995,131 +1975,92 @@ function isAboveStrikeContract(
     );
 }
 
-function selectCurrentContract(candidates) {
-    const currentTime = Date.now();
+function selectCurrentContract(
+    candidates
+) {
+    const currentTime = now();
 
-    const valid = (candidates || [])
-        .filter(contract => contract)
-        .filter(contract => isFifteenMinuteStrikeInstrument(contract))
-        .map(contract => {
-            const expiry =
-                safeNumber(
-                    contract.expiryTimestamp
-                ) ??
-                safeNumber(
-                    contract.expiry_timestamp_ms
-                );
-
-            const strike =
-                safeNumber(
-                    contract.strike
-                ) ??
-                extractStrikePrice(
-                    contract
-                );
-
-            return {
-                instrument: contract,
-                expiry,
-                strike,
-                strikeIndex: getStrikeIndex(contract),
-                operator: getStrikeOperator(contract)
-            };
-        })
-        .filter(contract =>
-            contract.expiry !== null &&
-            contract.expiry > currentTime
-        );
+    const valid =
+        candidates
+            .filter(
+                (instrument) =>
+                    instrument &&
+                    instrument.tradable !== false &&
+                    isFifteenMinuteStrikeInstrument(instrument) &&
+                    isAboveStrikeContract(instrument) &&
+                    safeNumber(instrument.expiry_timestamp_ms) !== null &&
+                    safeNumber(instrument.expiry_timestamp_ms) > currentTime
+            )
+            .map(
+                (instrument) => ({
+                    instrument,
+                    expiry: safeNumber(
+                        instrument.expiry_timestamp_ms
+                    ),
+                    strike: extractStrikePrice(instrument),
+                    strikeIndex: getStrikeIndex(instrument),
+                    operator: getStrikeOperator(instrument)
+                })
+            );
 
     if (!valid.length) {
         return null;
     }
 
-    const nearestExpiry = Math.min(
-        ...valid.map(
-            contract =>
-                contract.expiry
-        )
+    // The active contract is the one that expires first. Only after
+    // fixing the expiry do we choose the closest strike for that exact
+    // contract window. This prevents the strike from jumping between
+    // different future expiries whenever BTC moves.
+    const nextExpiry = Math.min(
+        ...valid.map((item) => item.expiry)
     );
 
     const sameExpiry =
         valid.filter(
-            contract =>
-                contract.expiry ===
-                nearestExpiry
+            (item) =>
+                item.expiry === nextExpiry
         );
 
-    const referencePrice =
-        safeNumber(
-            state.btcIndexPrice ??
-            state.btcPrice
-        );
+    const btcPrice =
+        state.btcIndexPrice !== null
+            ? state.btcIndexPrice
+            : state.btcPrice;
 
-    sameExpiry.sort(
-        (a, b) => {
-            if (
-                referencePrice !== null &&
-                a.strike !== null &&
-                b.strike !== null
-            ) {
-                const distanceA =
-                    Math.abs(
-                        a.strike -
-                        referencePrice
+    if (btcPrice !== null) {
+        const withStrikes =
+            sameExpiry.filter(
+                (item) =>
+                    item.strike !== null
+            );
+
+        if (withStrikes.length) {
+            return withStrikes.sort(
+                (a, b) => {
+                    const aDistance = Math.abs(
+                        a.strike - btcPrice
+                    );
+                    const bDistance = Math.abs(
+                        b.strike - btcPrice
                     );
 
-                const distanceB =
-                    Math.abs(
-                        b.strike -
-                        referencePrice
-                    );
+                    if (aDistance !== bDistance) {
+                        return aDistance - bDistance;
+                    }
 
-                if (
-                    distanceA !==
-                    distanceB
-                ) {
                     return (
-                        distanceA -
-                        distanceB
+                        (a.strikeIndex ?? Number.MAX_SAFE_INTEGER) -
+                        (b.strikeIndex ?? Number.MAX_SAFE_INTEGER)
                     );
                 }
-            }
-
-            const aStrikeIndex =
-                safeNumber(
-                    a.strikeIndex
-                );
-
-            const bStrikeIndex =
-                safeNumber(
-                    b.strikeIndex
-                );
-
-            if (
-                aStrikeIndex !== null &&
-                bStrikeIndex !== null &&
-                aStrikeIndex !==
-                bStrikeIndex
-            ) {
-                return (
-                    aStrikeIndex -
-                    bStrikeIndex
-                );
-            }
-
-            return String(
-                a.instrument?.symbol ||
-                ''
-            ).localeCompare(
-                String(
-                    b.instrument?.symbol ||
-                    ''
-                )
-            );
+            )[0];
         }
-    );
+    }
 
-    return sameExpiry[0] || null;
+    return sameExpiry.sort(
+        (a, b) =>
+            (a.strikeIndex ?? Number.MAX_SAFE_INTEGER) -
+            (b.strikeIndex ?? Number.MAX_SAFE_INTEGER)
+    )[0];
 }
 
 async function refreshInstruments() {
@@ -2409,100 +2350,68 @@ async function refreshInstruments() {
                 normalizeInstrument
             );
 
-        const selected =
-            selectCurrentContract(
-                btcFifteenMinuteInstruments
-            );
+        const activeExpiry =
+            currentContract &&
+            safeNumber(currentContract.expiry);
 
-        if (
-            selected
-        ) {
-            const previousSymbol =
-                currentContract
-                    ?.instrument
-                    ?.symbol ||
-                null;
+        const activeStillValid =
+            activeExpiry !== null &&
+            activeExpiry > now();
 
-            currentContract =
-                selected;
-
-            if (
-                previousSymbol &&
-                previousSymbol !==
-                    selected.instrument.symbol
-            ) {
-                console.log(
-                    `[ODIN] Contract changed: ${previousSymbol} -> ${selected.instrument.symbol}`
-                );
-
-                currentRound =
-                    null;
-            }
-
-            state.contractSymbol =
-                selected.instrument.symbol ||
-                null;
-
-            state.contractExpiry =
-                selected.expiry ||
-                null;
-
-            state.strikePrice =
-                selected.strike ||
-                null;
-
-            state.activeRoundId =
-                createRoundId(
-                    selected.expiry
-                );
-
-            state.secondsRemaining =
-                Math.max(
-                    0,
-                    Math.floor(
-                        (
-                            selected.expiry -
-                            now()
-                        ) /
-                        1000
-                    )
-                );
-
-            dcmSubscribedContractSymbol =
-                selected.instrument.symbol ||
-                null;
-
-            if (
-                dcmMarketSocket &&
-                dcmMarketSocket.readyState ===
-                    1 &&
-                dcmSubscribedContractSymbol
-            ) {
-                subscribeDCMMarketChannel(
-                    `settlement.${dcmSubscribedContractSymbol}`
-                );
-            }
+        if (activeStillValid) {
+            // Never re-pick the strike while the current contract is active.
+            resolveCurrentContract();
         } else {
-            currentContract =
-                null;
+            const selected =
+                selectCurrentContract(
+                    btcFifteenMinuteInstruments
+                );
 
-            state.contractSymbol =
-                null;
+            if (selected) {
+                const previousSymbol =
+                    currentContract?.instrument?.symbol ||
+                    null;
 
-            state.contractExpiry =
-                null;
+                currentContract = selected;
 
-            state.strikePrice =
-                null;
+                if (
+                    previousSymbol &&
+                    previousSymbol !== selected.instrument.symbol
+                ) {
+                    console.log(
+                        `[ODIN] Contract changed: ${previousSymbol} -> ${selected.instrument.symbol}`
+                    );
+                }
 
-            state.secondsRemaining =
-                null;
+                state.contractSymbol =
+                    selected.instrument.symbol || null;
+                state.contractExpiry =
+                    selected.expiry || null;
+                state.strikePrice =
+                    safeNumber(selected.strike);
+                state.activeRoundId =
+                    createRoundId(selected.expiry);
+                state.secondsRemaining =
+                    Math.max(
+                        0,
+                        Math.floor(
+                            (selected.expiry - now()) /
+                            1000
+                        )
+                    );
 
-            state.activeRoundId =
-                null;
-
-            dcmSubscribedContractSymbol =
-                null;
+                dcmSubscribedContractSymbol =
+                    selected.instrument.symbol || null;
+            } else {
+                currentContract = null;
+                state.contractSymbol = null;
+                state.contractExpiry = null;
+                state.strikePrice = null;
+                state.secondsRemaining = null;
+                state.activeRoundId = null;
+                dcmSubscribedContractSymbol = null;
+            }
+        }
 
             if (
                 now() -
@@ -2516,7 +2425,6 @@ async function refreshInstruments() {
                 lastNoContractLog =
                     now();
             }
-        }
     } catch (error) {
         console.error(
             "[ODIN] Instrument refresh error:",
@@ -2529,187 +2437,98 @@ async function refreshInstruments() {
 }
 
 function resolveCurrentContract() {
+    const currentTime = now();
+
     if (
         currentRound &&
-        currentRound.symbol
+        currentRound.symbol &&
+        safeNumber(currentRound.expiry) !== null &&
+        currentRound.expiry > currentTime
     ) {
         const locked =
             rawBinaryInstruments.find(
-                (
-                    instrument
-                ) =>
-                    instrument.symbol ===
-                    currentRound.symbol &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) !== null &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) >
-                        now()
+                (instrument) =>
+                    instrument.symbol === currentRound.symbol &&
+                    safeNumber(instrument.expiry_timestamp_ms) ===
+                        safeNumber(currentRound.expiry)
             );
 
-        if (
-            locked
-        ) {
+        if (locked) {
             currentContract = {
-                instrument:
-                    locked,
-
-                expiry:
-                    safeNumber(
-                        locked.expiry_timestamp_ms
-                    ),
-
-                strike:
-                    extractStrikePrice(
-                        locked
-                    ),
-
-                strikeIndex:
-                    getStrikeIndex(
-                        locked
-                    ),
-
-                operator:
-                    getStrikeOperator(
-                        locked
-                    )
+                instrument: locked,
+                expiry: safeNumber(locked.expiry_timestamp_ms),
+                strike: extractStrikePrice(locked),
+                strikeIndex: getStrikeIndex(locked),
+                operator: getStrikeOperator(locked)
             };
 
-            state.contractSymbol =
-                locked.symbol ||
-                null;
-
-            state.contractExpiry =
-                currentContract.expiry ||
-                null;
-
-            state.strikePrice =
-                currentContract.strike ||
-                null;
-
-            state.secondsRemaining =
-                Math.max(
-                    0,
-                    Math.floor(
-                        (
-                            currentContract.expiry -
-                            now()
-                        ) /
-                        1000
-                    )
-                );
-
-            state.activeRoundId =
-                createRoundId(
-                    currentContract.expiry
-                );
-
+            state.contractSymbol = locked.symbol || null;
+            state.contractExpiry = currentContract.expiry || null;
+            state.strikePrice = currentContract.strike || null;
+            state.secondsRemaining = Math.max(
+                0,
+                Math.floor(
+                    (currentContract.expiry - currentTime) / 1000
+                )
+            );
+            state.activeRoundId = currentRound.id;
             return;
         }
     }
 
     if (
-        !currentContract ||
-        !currentContract.instrument
+        currentContract &&
+        safeNumber(currentContract.expiry) !== null &&
+        currentContract.expiry > currentTime
     ) {
-        const selected =
-            selectCurrentContract(
-                rawBinaryInstruments
-            );
-
-        if (
-            selected
-        ) {
-            currentContract =
-                selected;
-        }
-    }
-
-    if (
-        !currentContract
-    ) {
-        return;
-    }
-
-    const expiry =
-        safeNumber(
-            currentContract.expiry
-        );
-
-    if (
-        expiry ===
-            null ||
-        expiry <=
-            now()
-    ) {
-        currentContract =
-            null;
-
         state.contractSymbol =
-            null;
-
-        state.contractExpiry =
-            null;
-
-        state.strikePrice =
-            null;
-
-        state.secondsRemaining =
-            null;
-
-        state.activeRoundId =
-            null;
-
-        return;
-    }
-
-    state.contractSymbol =
-        currentContract.instrument
-            ?.symbol ||
-        null;
-
-    state.contractExpiry =
-        expiry;
-
-    state.strikePrice =
-        safeNumber(
-            currentContract.strike
-        );
-
-    state.secondsRemaining =
-        Math.max(
+            currentContract.instrument?.symbol || null;
+        state.contractExpiry = currentContract.expiry;
+        state.strikePrice = safeNumber(currentContract.strike);
+        state.secondsRemaining = Math.max(
             0,
             Math.floor(
-                (
-                    expiry -
-                    now()
-                ) /
-                1000
+                (currentContract.expiry - currentTime) / 1000
             )
         );
+        state.activeRoundId =
+            currentRound?.id ||
+            createRoundId(currentContract.expiry);
+        return;
+    }
 
+    currentContract = null;
+
+    const selected =
+        selectCurrentContract(rawBinaryInstruments);
+
+    if (!selected) {
+        state.contractSymbol = null;
+        state.contractExpiry = null;
+        state.strikePrice = null;
+        state.secondsRemaining = null;
+        state.activeRoundId = null;
+        dcmSubscribedContractSymbol = null;
+        return;
+    }
+
+    currentContract = selected;
+
+    state.contractSymbol =
+        selected.instrument.symbol || null;
+    state.contractExpiry = selected.expiry || null;
+    state.strikePrice = safeNumber(selected.strike);
+    state.secondsRemaining = Math.max(
+        0,
+        Math.floor(
+            (selected.expiry - currentTime) / 1000
+        )
+    );
     state.activeRoundId =
-        createRoundId(
-            expiry
-        );
+        createRoundId(selected.expiry);
 
     dcmSubscribedContractSymbol =
-        currentContract.instrument
-            ?.symbol ||
-        null;
-
-    if (
-        dcmMarketSocket &&
-        dcmMarketSocket.readyState ===
-            1 &&
-        dcmSubscribedContractSymbol
-    ) {
-        subscribeDCMMarketChannel(
-            `settlement.${dcmSubscribedContractSymbol}`
-        );
-    }
+        selected.instrument.symbol || null;
 }
 
 function calculateReturns(
@@ -3721,7 +3540,9 @@ function calculateForecast() {
             null ||
         state.btcIndexStale ||
         state.btcIndexSource !==
-            "DCM_INDEX" ||
+            "DCM_INDEX" &&
+        state.btcIndexSource !==
+            "EXCHANGE_INDEX_FALLBACK" ||
         state.strikePrice ===
             null
     ) {
@@ -4118,7 +3939,7 @@ function updateContractState() {
         state.marketProbability =
             clamp(
                 state.contractMid *
-                    10,
+                    100,
                 0,
                 100
             );
@@ -4129,31 +3950,79 @@ function updateContractState() {
 }
 
 function buildPublicState() {
+    const currentTime = now();
+    const collectionTotalSeconds =
+        CONFIG.collectionSeconds;
+
+    let collectionElapsed = null;
+    let collectionRemaining = null;
+
+    if (currentRound) {
+        const startedAt =
+            safeNumber(currentRound.startedAt);
+
+        if (startedAt !== null) {
+            collectionElapsed = Math.max(
+                0,
+                Math.floor(
+                    (currentTime - startedAt) / 1000
+                )
+            );
+
+            collectionRemaining = Math.max(
+                0,
+                collectionTotalSeconds - collectionElapsed
+            );
+        }
+    }
+
+    const wins = completedRounds.filter(
+        (round) => round.result === "WIN"
+    ).length;
+
+    const losses = completedRounds.filter(
+        (round) => round.result === "LOSS"
+    ).length;
+
+    const total = wins + losses;
+
     return {
         ...state,
 
-        serverTime:
-            now(),
+        serverTime: currentTime,
 
         contractExpiry:
             state.contractExpiry
-                ? formatTimestamp(
-                      state.contractExpiry
-                  )
+                ? formatTimestamp(state.contractExpiry)
                 : null,
 
         collectionStartedAt:
             state.collectionStartedAt
-                ? formatTimestamp(
-                      state.collectionStartedAt
-                  )
+                ? formatTimestamp(state.collectionStartedAt)
                 : null,
+
+        collectionElapsed,
+        collectionRemaining,
+        collectionTotalSeconds,
+        forecastMade:
+            Boolean(currentRound?.forecastMade),
+
+        performance: {
+            wins,
+            losses,
+            total,
+            accuracy:
+                total > 0
+                    ? (wins / total) * 100
+                    : null
+        },
+
+        recentRounds:
+            completedRounds.slice(-20).reverse(),
 
         lastUpdate:
             state.lastUpdate
-                ? formatTimestamp(
-                      state.lastUpdate
-                  )
+                ? formatTimestamp(state.lastUpdate)
                 : null
     };
 }
@@ -4399,33 +4268,38 @@ function resolveExpiredRoundFromIndex() {
 
 function updateRoundLifecycle() {
     processSettlementCache();
-
     resolveExpiredRoundFromIndex();
 
     if (
         currentRound &&
-        currentRound.result
+        safeNumber(currentRound.expiry) !== null &&
+        now() >= currentRound.expiry
     ) {
-        currentRound =
-            null;
+        if (currentRound.result) {
+            console.log(
+                `[ODIN] Round ${currentRound.id} resolved: ${currentRound.result}`
+            );
+        } else if (!currentRound.forecastMade) {
+            console.log(
+                `[ODIN] Round ${currentRound.id} expired without a forecast; starting a fresh round.`
+            );
+        }
 
-        state.activeRoundId =
-            null;
+        currentRound = null;
+        currentContract = null;
 
-        state.forecast =
-            "WAIT";
-
-        state.forecastProbability =
-            null;
-
-        state.forecastConfidence =
-            null;
-
+        state.activeRoundId = null;
+        state.contractSymbol = null;
+        state.contractExpiry = null;
+        state.strikePrice = null;
+        state.secondsRemaining = null;
+        state.collectionStartedAt = null;
+        state.forecast = "WAIT";
+        state.forecastProbability = null;
+        state.forecastConfidence = null;
         state.forecastReason =
-            "Previous paper round resolved. Waiting for the next BTC 15-minute round.";
-
-        state.phase =
-            "WAITING";
+            "Previous 15-minute round ended. Loading the next contract.";
+        state.phase = "WAITING";
     }
 }
 
