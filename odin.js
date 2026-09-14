@@ -51,7 +51,7 @@ const CONFIG = {
         15000,
 
     targetStrikeDurationMs:
-        20 *
+        15 *
         60 *
         1000,
 
@@ -992,14 +992,7 @@ async function getBTCBook() {
             }
         );
 
-    /*
-     * Crypto.com REST returns the book inside result.data[0].
-     * Do not pass the wrapper object into the book calculator.
-     */
-    return (
-        result?.data?.[0] ||
-        null
-    );
+    return result;
 }
 
 async function getBTCTrades() {
@@ -1725,6 +1718,24 @@ function getPeriodCode(
         }
     }
 
+    /*
+     * Some live DCM REST responses expose the period code in the
+     * symbol while returning an empty attributes object. Crypto.com's
+     * documented symbology places PERIOD_CODE at path segment 5, e.g.
+     * NX.F.OPT.BTC.I.395.1.20260914.
+     */
+    const symbolParts =
+        String(
+            instrument?.symbol ||
+                ""
+        )
+            .toUpperCase()
+            .split(".");
+
+    if (symbolParts[4]) {
+        return symbolParts[4];
+    }
+
     return null;
 }
 
@@ -1785,7 +1796,7 @@ function getOpenCloseTimes(
     return null;
 }
 
-function isTwentyMinuteStrikeInstrument(
+function isFifteenMinuteStrikeInstrument(
     instrument
 ) {
     if (!instrument) {
@@ -1824,14 +1835,14 @@ function isTwentyMinuteStrikeInstrument(
 
     /*
      * Without OPEN_TIME/CLOSE_TIME, a single intraday expiry is
-     * not enough evidence to call the contract 20 minutes. The
-     * refresh routine separately verifies a 20-minute expiry
+     * not enough evidence to call the contract 15 minutes. The
+     * refresh routine separately verifies a 15-minute expiry
      * sequence before these instruments can be selected.
      */
     return false;
 }
 
-function verifyTwentyMinuteCandidates(
+function verifyFifteenMinuteCandidates(
     candidates
 ) {
     const verified =
@@ -1897,6 +1908,8 @@ function verifyTwentyMinuteCandidates(
             (a, b) => a - b
         );
 
+    let cadencePairs = 0;
+
     for (let i = 0; i < uniqueExpiries.length - 1; i++) {
         const a = uniqueExpiries[i];
         const b = uniqueExpiries[i + 1];
@@ -1905,6 +1918,8 @@ function verifyTwentyMinuteCandidates(
             b - a ===
             CONFIG.targetStrikeDurationMs
         ) {
+            cadencePairs += 1;
+
             for (const instrument of expiryMap.get(a)) {
                 verified.add(
                     instrument.symbol
@@ -1917,6 +1932,29 @@ function verifyTwentyMinuteCandidates(
                 );
             }
         }
+    }
+
+    const cadenceVerified =
+        cadencePairs > 0;
+
+    console.log(
+        `[ODIN] BTC 15-minute expiry cadence check: ${cadenceVerified ? "PASS" : "FAIL"} | unique future intraday expiries: ${uniqueExpiries.length} | 15-minute adjacent pairs: ${cadencePairs}`
+    );
+
+    if (!cadenceVerified) {
+        console.log(
+            "[ODIN] BTC future intraday expiry sample:",
+            JSON.stringify(
+                uniqueExpiries
+                    .slice(0, 12)
+                    .map(
+                        (expiry) =>
+                            new Date(expiry).toISOString()
+                    ),
+                null,
+                2
+            )
+        );
     }
 
     return candidates.filter(
@@ -2209,13 +2247,13 @@ async function refreshInstruments() {
             );
         }
 
-        const verifiedTwentyMinuteInstruments =
-            verifyTwentyMinuteCandidates(
+        const verifiedFifteenMinuteInstruments =
+            verifyFifteenMinuteCandidates(
                 btcInstruments
             );
 
         console.log(
-            `[ODIN] BTC 20-minute Strike candidates VERIFIED: ${verifiedTwentyMinuteInstruments.length}`
+            `[ODIN] BTC 15-minute Strike candidates VERIFIED: ${verifiedFifteenMinuteInstruments.length}`
         );
 
         if (
@@ -2254,7 +2292,7 @@ async function refreshInstruments() {
                     );
 
             console.log(
-                "[ODIN] No VERIFIED 20-minute BTC Strike contract is available. Intraday future expiries:",
+                "[ODIN] No VERIFIED 15-minute BTC Strike contract is available. Intraday future expiries:",
                 JSON.stringify(
                     expirySummary
                 )
@@ -2262,7 +2300,7 @@ async function refreshInstruments() {
         }
 
         instruments =
-            verifiedTwentyMinuteInstruments;
+            verifiedFifteenMinuteInstruments;
 
         /*
          * Preserve an active paper contract across
@@ -3298,7 +3336,7 @@ async function collectContractData() {
             state.marketProbability =
                 clamp(
                     state.contractMid *
-                        100,
+                        10,
                     0,
                     100
                 );
@@ -3311,7 +3349,7 @@ async function collectContractData() {
                 null
                     ? clamp(
                           ticker.last *
-                              100,
+                              10,
                           0,
                           100
                       )
@@ -4499,7 +4537,7 @@ async function verifyDataSourcesAtRuntime() {
         };
 
         console.log(
-            `[ODIN] DATA HEALTH | DCM instruments=${state.dataSourceHealth.dcmInstruments} | index=${state.dataSourceHealth.btcIndex} (${index?.source || "none"}) | perp=${state.dataSourceHealth.btcPerp} | book=${state.dataSourceHealth.btcBook} | trades=${state.dataSourceHealth.btcTrades} | verified20m=${state.dataSourceHealth.verifiedStrikeContract} | ${now() - startedAt}ms`
+            `[ODIN] DATA HEALTH | DCM instruments=${state.dataSourceHealth.dcmInstruments} | index=${state.dataSourceHealth.btcIndex} (${index?.source || "none"}) | perp=${state.dataSourceHealth.btcPerp} | book=${state.dataSourceHealth.btcBook} | trades=${state.dataSourceHealth.btcTrades} | verified15m=${state.dataSourceHealth.verifiedStrikeContract} | ${now() - startedAt}ms`
         );
 
         return state.dataSourceHealth;
