@@ -1996,44 +1996,128 @@ function isAboveStrikeContract(
 }
 
 function selectCurrentContract(candidates) {
-    const now = Date.now();
+    const currentTime = Date.now();
 
     const valid = (candidates || [])
-        .filter(contract => contract && contract.expiryTimestamp)
-        .filter(contract => Number(contract.expiryTimestamp) > now)
-        .filter(contract => isFifteenMinuteStrikeInstrument(contract));
+        .filter(contract => contract)
+        .filter(contract => isFifteenMinuteStrikeInstrument(contract))
+        .map(contract => {
+            const expiry =
+                safeNumber(
+                    contract.expiryTimestamp
+                ) ??
+                safeNumber(
+                    contract.expiry_timestamp_ms
+                );
+
+            const strike =
+                safeNumber(
+                    contract.strike
+                ) ??
+                extractStrikePrice(
+                    contract
+                );
+
+            return {
+                instrument: contract,
+                expiry,
+                strike,
+                strikeIndex: getStrikeIndex(contract),
+                operator: getStrikeOperator(contract)
+            };
+        })
+        .filter(contract =>
+            contract.expiry !== null &&
+            contract.expiry > currentTime
+        );
 
     if (!valid.length) {
         return null;
     }
 
     const nearestExpiry = Math.min(
-        ...valid.map(contract => Number(contract.expiryTimestamp))
+        ...valid.map(
+            contract =>
+                contract.expiry
+        )
     );
 
-    const sameExpiry = valid.filter(contract =>
-        Number(contract.expiryTimestamp) === nearestExpiry
-    );
+    const sameExpiry =
+        valid.filter(
+            contract =>
+                contract.expiry ===
+                nearestExpiry
+        );
 
-    const referencePrice = safeNumber(
-        state.btcIndexPrice ?? state.btcPrice
-    );
+    const referencePrice =
+        safeNumber(
+            state.btcIndexPrice ??
+            state.btcPrice
+        );
 
-    sameExpiry.sort((a, b) => {
-        const aStrike = safeNumber(a.strike);
-        const bStrike = safeNumber(b.strike);
+    sameExpiry.sort(
+        (a, b) => {
+            if (
+                referencePrice !== null &&
+                a.strike !== null &&
+                b.strike !== null
+            ) {
+                const distanceA =
+                    Math.abs(
+                        a.strike -
+                        referencePrice
+                    );
 
-        if (referencePrice !== null && aStrike !== null && bStrike !== null) {
-            const distanceA = Math.abs(aStrike - referencePrice);
-            const distanceB = Math.abs(bStrike - referencePrice);
+                const distanceB =
+                    Math.abs(
+                        b.strike -
+                        referencePrice
+                    );
 
-            if (distanceA !== distanceB) {
-                return distanceA - distanceB;
+                if (
+                    distanceA !==
+                    distanceB
+                ) {
+                    return (
+                        distanceA -
+                        distanceB
+                    );
+                }
             }
-        }
 
-        return String(a.symbol || '').localeCompare(String(b.symbol || ''));
-    });
+            const aStrikeIndex =
+                safeNumber(
+                    a.strikeIndex
+                );
+
+            const bStrikeIndex =
+                safeNumber(
+                    b.strikeIndex
+                );
+
+            if (
+                aStrikeIndex !== null &&
+                bStrikeIndex !== null &&
+                aStrikeIndex !==
+                bStrikeIndex
+            ) {
+                return (
+                    aStrikeIndex -
+                    bStrikeIndex
+                );
+            }
+
+            return String(
+                a.instrument?.symbol ||
+                ''
+            ).localeCompare(
+                String(
+                    b.instrument?.symbol ||
+                    ''
+                )
+            );
+        }
+    );
 
     return sameExpiry[0] || null;
 }
