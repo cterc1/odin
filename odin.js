@@ -992,7 +992,47 @@ async function getBTCBook() {
             }
         );
 
-    return result;
+    if (!result) {
+        return null;
+    }
+
+    if (
+        Array.isArray(result.bids) ||
+        Array.isArray(result.asks)
+    ) {
+        return result;
+    }
+
+    if (
+        result.data &&
+        !Array.isArray(result.data) &&
+        (
+            Array.isArray(result.data.bids) ||
+            Array.isArray(result.data.asks)
+        )
+    ) {
+        return result.data;
+    }
+
+    if (
+        Array.isArray(result.data) &&
+        result.data.length > 0
+    ) {
+        const first =
+            result.data[0];
+
+        if (
+            first &&
+            (
+                Array.isArray(first.bids) ||
+                Array.isArray(first.asks)
+            )
+        ) {
+            return first;
+        }
+    }
+
+    return null;
 }
 
 async function getBTCTrades() {
@@ -1718,24 +1758,6 @@ function getPeriodCode(
         }
     }
 
-    /*
-     * Some live DCM REST responses expose the period code in the
-     * symbol while returning an empty attributes object. Crypto.com's
-     * documented symbology places PERIOD_CODE at path segment 5, e.g.
-     * NX.F.OPT.BTC.I.395.1.20260914.
-     */
-    const symbolParts =
-        String(
-            instrument?.symbol ||
-                ""
-        )
-            .toUpperCase()
-            .split(".");
-
-    if (symbolParts[4]) {
-        return symbolParts[4];
-    }
-
     return null;
 }
 
@@ -1842,6 +1864,32 @@ function isFifteenMinuteStrikeInstrument(
     return false;
 }
 
+function isAboveStrikeContract(
+    instrument
+) {
+    const operator =
+        getStrikeOperator(
+            instrument
+        );
+
+    if (
+        operator === ">" ||
+        operator === ">="
+    ) {
+        return true;
+    }
+
+    const displayName =
+        String(
+            instrument?.display_name ||
+                ""
+        ).toUpperCase();
+
+    return /(?:BITCOIN|BTC|XBT)\s*>/.test(
+        displayName
+    );
+}
+
 function verifyFifteenMinuteCandidates(
     candidates
 ) {
@@ -1908,8 +1956,6 @@ function verifyFifteenMinuteCandidates(
             (a, b) => a - b
         );
 
-    let cadencePairs = 0;
-
     for (let i = 0; i < uniqueExpiries.length - 1; i++) {
         const a = uniqueExpiries[i];
         const b = uniqueExpiries[i + 1];
@@ -1918,8 +1964,6 @@ function verifyFifteenMinuteCandidates(
             b - a ===
             CONFIG.targetStrikeDurationMs
         ) {
-            cadencePairs += 1;
-
             for (const instrument of expiryMap.get(a)) {
                 verified.add(
                     instrument.symbol
@@ -1932,29 +1976,6 @@ function verifyFifteenMinuteCandidates(
                 );
             }
         }
-    }
-
-    const cadenceVerified =
-        cadencePairs > 0;
-
-    console.log(
-        `[ODIN] BTC 15-minute expiry cadence check: ${cadenceVerified ? "PASS" : "FAIL"} | unique future intraday expiries: ${uniqueExpiries.length} | 15-minute adjacent pairs: ${cadencePairs}`
-    );
-
-    if (!cadenceVerified) {
-        console.log(
-            "[ODIN] BTC future intraday expiry sample:",
-            JSON.stringify(
-                uniqueExpiries
-                    .slice(0, 12)
-                    .map(
-                        (expiry) =>
-                            new Date(expiry).toISOString()
-                    ),
-                null,
-                2
-            )
-        );
     }
 
     return candidates.filter(
@@ -2256,8 +2277,41 @@ async function refreshInstruments() {
             `[ODIN] BTC 15-minute Strike candidates VERIFIED: ${verifiedFifteenMinuteInstruments.length}`
         );
 
+        const verifiedExpirySet =
+            [
+                ...new Set(
+                    verifiedFifteenMinuteInstruments
+                        .map(
+                            (instrument) =>
+                                safeNumber(
+                                    instrument.expiry_timestamp_ms
+                                )
+                        )
+                        .filter(
+                            (expiry) =>
+                                expiry !== null &&
+                                expiry > now()
+                        )
+                )
+            ].sort(
+                (a, b) => a - b
+            );
+
+        const fifteenMinutePairs =
+            verifiedExpirySet.filter(
+                (expiry, index) =>
+                    index > 0 &&
+                    expiry -
+                        verifiedExpirySet[index - 1] ===
+                        CONFIG.targetStrikeDurationMs
+            ).length;
+
+        console.log(
+            `[ODIN] BTC 15-minute expiry verification: ${fifteenMinutePairs > 0 ? "PASS" : "FAIL"} | verified expiries=${verifiedExpirySet.length} | adjacent 15m pairs=${fifteenMinutePairs}`
+        );
+
         if (
-            verifiedTwentyMinuteInstruments.length === 0
+            verifiedFifteenMinuteInstruments.length === 0
         ) {
             const intraday =
                 btcInstruments.filter(
