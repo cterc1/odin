@@ -19,6 +19,9 @@ const CRYPTO_API =
 const CRYPTO_DCM_API =
     "https://api.crypto.com/dcm/v1";
 
+const CRYPTO_PREDICTIONS_API =
+    "https://data-api.crypto.com";
+
 const CONFIG = {
     underlying: "BTC",
 
@@ -51,7 +54,7 @@ const CONFIG = {
         15000,
 
     targetStrikeDurationMs:
-        15 *
+        20 *
         60 *
         1000,
 
@@ -240,6 +243,9 @@ let state = {
         null,
 
     dataSourceHealth: {
+        predictionApi: false,
+        prediction15MinuteEvent: false,
+        predictionContractPrice: false,
         dcmInstruments: false,
         btcIndex: false,
         btcPerp: false,
@@ -281,6 +287,12 @@ let lastNoContractLog =
 
 let rawBinaryInstruments =
     [];
+
+let predictionEvents =
+    [];
+
+let currentPredictionEvent =
+    null;
 
 let instrumentRefreshInProgress =
     false;
@@ -621,6 +633,65 @@ async function cryptoRequest(
     }
 
     return json.result;
+}
+
+async function predictionsRequest(
+    endpoint,
+    params = {}
+) {
+    const url =
+        new URL(
+            `${CRYPTO_PREDICTIONS_API}${endpoint}`
+        );
+
+    for (
+        const [
+            key,
+            value
+        ] of Object.entries(
+            params
+        )
+    ) {
+        if (
+            value !== undefined &&
+            value !== null &&
+            value !== ""
+        ) {
+            url.searchParams.set(
+                key,
+                String(value)
+            );
+        }
+    }
+
+    const response =
+        await fetch(
+            url.toString(),
+            {
+                method: "GET",
+                headers: {
+                    Accept: "application/json"
+                }
+            }
+        );
+
+    if (!response.ok) {
+        throw new Error(
+            `Crypto.com Predictions API HTTP ${response.status}`
+        );
+    }
+
+    const json =
+        await response.json();
+
+    if (json?.error) {
+        throw new Error(
+            json.error.message ||
+            "Crypto.com Predictions API error"
+        );
+    }
+
+    return json;
 }
 
 /*
@@ -992,47 +1063,7 @@ async function getBTCBook() {
             }
         );
 
-    if (!result) {
-        return null;
-    }
-
-    if (
-        Array.isArray(result.bids) ||
-        Array.isArray(result.asks)
-    ) {
-        return result;
-    }
-
-    if (
-        result.data &&
-        !Array.isArray(result.data) &&
-        (
-            Array.isArray(result.data.bids) ||
-            Array.isArray(result.data.asks)
-        )
-    ) {
-        return result.data;
-    }
-
-    if (
-        Array.isArray(result.data) &&
-        result.data.length > 0
-    ) {
-        const first =
-            result.data[0];
-
-        if (
-            first &&
-            (
-                Array.isArray(first.bids) ||
-                Array.isArray(first.asks)
-            )
-        ) {
-            return first;
-        }
-    }
-
-    return null;
+    return result;
 }
 
 async function getBTCTrades() {
@@ -1054,79 +1085,308 @@ async function getBTCTrades() {
     );
 }
 
-async function getInstruments() {
-    let allInstruments =
-        [];
-
-    let cursor =
-        null;
-
-    for (
-        let page = 0;
-        page < 1000;
-        page++
-    ) {
-        const params =
-            {
-                inst_type:
-                    "BINARY_OPTION",
-
-                limit:
-                    1000,
-
-                since:
-                    0
-            };
-
-        if (
-            cursor
-        ) {
-            params.cursor =
-                cursor;
-        }
-
-        const result =
-            await cryptoRequest(
-                "public/get-instruments",
-                params,
-                CRYPTO_DCM_API
-            );
-
-        const pageData =
-            Array.isArray(
-                result?.data
-            )
-                ? result.data
-                : [];
-
-        allInstruments =
-            allInstruments.concat(
-                pageData
-            );
-
-        console.log(
-            `[ODIN] Instrument page ${page + 1}: ${pageData.length} instruments | Total: ${allInstruments.length}`
+function parsePredictionEventTime(
+    value
+) {
+    const timestamp =
+        Date.parse(
+            String(value || "")
         );
 
-        const nextCursor =
-            result?.next_cursor;
+    return Number.isFinite(timestamp)
+        ? timestamp
+        : null;
+}
 
-        if (
-            !nextCursor ||
-            !pageData.length
-        ) {
-            console.log(
-                `[ODIN] Finished instrument pagination at ${allInstruments.length} instruments`
-            );
+function extractPredictionStrike(
+    contractTitle
+) {
+    const match =
+        String(contractTitle || "").match(
+            /(?:ABOVE|BELOW|AT|OVER|UNDER)\s*\$?([0-9][0-9,]*(?:\.[0-9]+)?)/i
+        );
 
-            break;
-        }
-
-        cursor =
-            nextCursor;
+    if (!match) {
+        return null;
     }
 
-    return allInstruments;
+    const value =
+        safeNumber(
+            match[1].replace(/,/g, "")
+        );
+
+    return value !== null && value > 0
+        ? value
+        : null;
+}
+
+function predictionPeriodText(
+    contract
+) {
+    return [
+        contract?.market_type?.period,
+        contract?.market_type?.title,
+        contract?.market_type?.name
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+}
+
+function isPrediction15MinuteEvent(
+    event,
+    eventTimes = []
+) {
+    const expiry =
+        parsePredictionEventTime(
+            event?.event_date
+        );
+
+    if (
+        expiry === null ||
+        expiry <= now()
+    ) {
+        return false;
+    }
+
+    const title =
+        String(
+            event?.title || ""
+        ).toLowerCase();
+
+    if (!title.includes("bitcoin price")) {
+        return false;
+    }
+
+    const contracts =
+        Array.isArray(event?.contracts)
+            ? event.contracts
+            : [];
+
+    if (
+        contracts.some(
+            (contract) =>
+                /\b15\s*(?:min|mins|minute|minutes)\b/i.test(
+                    predictionPeriodText(contract)
+                )
+        )
+    ) {
+        return true;
+    }
+
+    const expiryMinute =
+        new Date(expiry).getUTCMinutes();
+
+    if (
+        expiryMinute % 15 !==
+        0
+    ) {
+        return false;
+    }
+
+    return eventTimes.some(
+        (time) =>
+            time !== expiry &&
+            Math.abs(time - expiry) ===
+                15 * 60 * 1000
+    );
+}
+
+function normalizePredictionContract(
+    event,
+    contract
+) {
+    const expiry =
+        parsePredictionEventTime(
+            event?.event_date
+        );
+
+    return {
+        symbol:
+            contract?.symbol || null,
+        display_name:
+            contract?.title || null,
+        underlying_symbol:
+            "BTCUSD",
+        product_type:
+            "PREDICTION",
+        detail_product_type:
+            "CRYPTO_PRICE",
+        expiry_timestamp_ms:
+            expiry,
+        tradable:
+            contract?.status === "active",
+        strike_price:
+            extractPredictionStrike(
+                contract?.title
+            ),
+        strike_operator:
+            ">",
+        strike_index:
+            contract?.id || null,
+        prediction_event_id:
+            event?.id || null,
+        prediction_event_title:
+            event?.title || null,
+        prediction_event_date:
+            event?.event_date || null,
+        prediction_contract_id:
+            contract?.id || null,
+        prediction_status:
+            contract?.status || null,
+        prediction_chance:
+            safeNumber(contract?.chance),
+        prediction_yes:
+            safeNumber(contract?.yes),
+        prediction_no:
+            safeNumber(contract?.no),
+        prediction_period:
+            predictionPeriodText(contract) || null,
+        prediction_market_type:
+            contract?.market_type?.name ||
+            contract?.market_type?.title ||
+            null
+    };
+}
+
+async function getPredictionEvents() {
+    const search =
+        await predictionsRequest(
+            "/api/v1/predictions/events/search",
+            {
+                q: "Bitcoin price",
+                status: "active",
+                limit: 50,
+                sort_by: "date"
+            }
+        );
+
+    const summaries =
+        Array.isArray(search?.data)
+            ? search.data
+            : [];
+
+    const futureSummaries =
+        summaries
+            .filter(
+                (event) =>
+                    String(event?.title || "")
+                        .toLowerCase()
+                        .includes("bitcoin price") &&
+                    parsePredictionEventTime(
+                        event?.event_date
+                    ) > now()
+            )
+            .sort(
+                (a, b) =>
+                    parsePredictionEventTime(a.event_date) -
+                    parsePredictionEventTime(b.event_date)
+            )
+            .slice(0, 12);
+
+    const detailed =
+        await Promise.all(
+            futureSummaries.map(
+                async (summary) => {
+                    const response =
+                        await predictionsRequest(
+                            `/api/v1/predictions/events/${encodeURIComponent(summary.id)}`
+                        );
+
+                    return response?.data || null;
+                }
+            )
+        );
+
+    return detailed.filter(Boolean);
+}
+
+async function getInstruments() {
+    const events =
+        await getPredictionEvents();
+
+    predictionEvents =
+        events;
+
+    const eventTimes =
+        events
+            .map(
+                (event) =>
+                    parsePredictionEventTime(
+                        event.event_date
+                    )
+            )
+            .filter(
+                (time) => time !== null
+            );
+
+    const verifiedEvents =
+        events.filter(
+            (event) =>
+                isPrediction15MinuteEvent(
+                    event,
+                    eventTimes
+                )
+        );
+
+    console.log(
+        `[ODIN] Predictions API Bitcoin events received: ${events.length}`
+    );
+
+    console.log(
+        `[ODIN] Verified Bitcoin 15-minute Predict events: ${verifiedEvents.length}`
+    );
+
+    const contracts =
+        verifiedEvents
+            .flatMap(
+                (event) =>
+                    (Array.isArray(event.contracts)
+                        ? event.contracts
+                        : []
+                    ).map(
+                        (contract) =>
+                            normalizePredictionContract(
+                                event,
+                                contract
+                            )
+                    )
+            )
+            .filter(
+                (contract) =>
+                    contract.symbol &&
+                    contract.strike_price !== null &&
+                    contract.expiry_timestamp_ms !== null &&
+                    contract.prediction_status === "active"
+            );
+
+    rawBinaryInstruments =
+        contracts;
+
+    if (verifiedEvents.length) {
+        console.log(
+            "[ODIN] Predict 15-minute event sample:",
+            JSON.stringify(
+                verifiedEvents
+                    .slice(0, 3)
+                    .map(
+                        (event) => ({
+                            id: event.id,
+                            title: event.title,
+                            eventDate: event.event_date,
+                            period:
+                                event.contracts?.[0]?.market_type?.period || null,
+                            contracts:
+                                event.contracts?.length || 0
+                        })
+                    ),
+                null,
+                2
+            )
+        );
+    }
+
+    return contracts;
 }
 
 function getInstrumentAttributes(
@@ -1818,7 +2078,7 @@ function getOpenCloseTimes(
     return null;
 }
 
-function isFifteenMinuteStrikeInstrument(
+function isTwentyMinuteStrikeInstrument(
     instrument
 ) {
     if (!instrument) {
@@ -1857,40 +2117,14 @@ function isFifteenMinuteStrikeInstrument(
 
     /*
      * Without OPEN_TIME/CLOSE_TIME, a single intraday expiry is
-     * not enough evidence to call the contract 15 minutes. The
-     * refresh routine separately verifies a 15-minute expiry
+     * not enough evidence to call the contract 20 minutes. The
+     * refresh routine separately verifies a 20-minute expiry
      * sequence before these instruments can be selected.
      */
     return false;
 }
 
-function isAboveStrikeContract(
-    instrument
-) {
-    const operator =
-        getStrikeOperator(
-            instrument
-        );
-
-    if (
-        operator === ">" ||
-        operator === ">="
-    ) {
-        return true;
-    }
-
-    const displayName =
-        String(
-            instrument?.display_name ||
-                ""
-        ).toUpperCase();
-
-    return /(?:BITCOIN|BTC|XBT)\s*>/.test(
-        displayName
-    );
-}
-
-function verifyFifteenMinuteCandidates(
+function verifyTwentyMinuteCandidates(
     candidates
 ) {
     const verified =
@@ -1986,6 +2220,16 @@ function verifyFifteenMinuteCandidates(
     );
 }
 
+function isAboveStrikeContract(
+    instrument
+) {
+    const operator =
+        getStrikeOperator(instrument);
+
+    return operator === ">" ||
+        operator === ">=";
+}
+
 function selectCurrentContract(
     candidates
 ) {
@@ -1998,35 +2242,21 @@ function selectCurrentContract(
                 (instrument) =>
                     instrument &&
                     instrument.tradable !== false &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) !== null &&
-                    safeNumber(
-                        instrument.expiry_timestamp_ms
-                    ) > currentTime &&
-                    isAboveStrikeContract(
-                        instrument
-                    )
+                    safeNumber(instrument.expiry_timestamp_ms) !== null &&
+                    safeNumber(instrument.expiry_timestamp_ms) > currentTime &&
+                    isAboveStrikeContract(instrument)
             )
             .map(
                 (instrument) => ({
                     instrument,
                     expiry:
-                        safeNumber(
-                            instrument.expiry_timestamp_ms
-                        ),
+                        safeNumber(instrument.expiry_timestamp_ms),
                     strike:
-                        extractStrikePrice(
-                            instrument
-                        ),
+                        extractStrikePrice(instrument),
                     strikeIndex:
-                        getStrikeIndex(
-                            instrument
-                        ),
+                        getStrikeIndex(instrument),
                     operator:
-                        getStrikeOperator(
-                            instrument
-                        )
+                        getStrikeOperator(instrument)
                 })
             );
 
@@ -2044,8 +2274,7 @@ function selectCurrentContract(
     const sameExpiry =
         valid.filter(
             (item) =>
-                item.expiry ===
-                earliestExpiry
+                item.expiry === earliestExpiry
         );
 
     const btcPrice =
@@ -2064,500 +2293,144 @@ function selectCurrentContract(
         withStrikes.length
     ) {
         return withStrikes.sort(
-            (a, b) => {
-                const aDistance =
-                    Math.abs(
-                        a.strike -
-                            btcPrice
-                    );
-
-                const bDistance =
-                    Math.abs(
-                        b.strike -
-                            btcPrice
-                    );
-
-                if (
-                    aDistance !==
-                    bDistance
-                ) {
-                    return (
-                        aDistance -
-                        bDistance
-                    );
-                }
-
-                return (
-                    (a.strikeIndex ??
-                        Number.MAX_SAFE_INTEGER) -
-                    (b.strikeIndex ??
-                        Number.MAX_SAFE_INTEGER)
-                );
-            }
+            (a, b) =>
+                Math.abs(a.strike - btcPrice) -
+                Math.abs(b.strike - btcPrice)
         )[0];
     }
 
-    return sameExpiry.sort(
-        (a, b) =>
-            (a.strikeIndex ??
-                Number.MAX_SAFE_INTEGER) -
-            (b.strikeIndex ??
-                Number.MAX_SAFE_INTEGER)
-    )[0];
+    return sameExpiry[0];
 }
 
 async function refreshInstruments() {
-    if (
-        instrumentRefreshInProgress
-    ) {
+    if (instrumentRefreshInProgress) {
         console.log(
-            "[ODIN] Instrument refresh already in progress - skipping duplicate refresh"
+            "[ODIN] Predict event refresh already in progress - skipping duplicate refresh"
         );
-
         return;
     }
 
-    instrumentRefreshInProgress =
-        true;
+    instrumentRefreshInProgress = true;
 
     try {
         const all =
             await getInstruments();
 
-        rawBinaryInstruments =
-            all;
+        instruments = all;
 
         console.log(
-            `[ODIN] DCM BINARY_OPTION instruments received: ${all.length}`
+            `[ODIN] Crypto.com Predict active BTC contracts loaded: ${all.length}`
         );
 
-        const digitalCurrencyInstruments =
-            all.filter(
-                isDigitalCurrencyInstrument
-            );
-
-        console.log(
-            `[ODIN] Digital-currency Binary Options: ${digitalCurrencyInstruments.length}`
-        );
-
-        const btcInstruments =
-            digitalCurrencyInstruments.filter(
-                isBTCStrikeInstrument
-            );
-
-        console.log(
-            `[ODIN] BTC Strike candidates after DCM metadata filter: ${btcInstruments.length}`
-        );
-
-        const withDollarStrikes =
-            btcInstruments.filter(
-                (
-                    instrument
-                ) =>
-                    extractStrikePrice(
-                        instrument
-                    ) !== null
-            );
-
-        console.log(
-            `[ODIN] BTC instruments with detected dollar strikes: ${withDollarStrikes.length}`
-        );
-
-        if (
-            digitalCurrencyInstruments.length >
-                0 &&
-            btcInstruments.length ===
-                0
-        ) {
-            const btcLikeDigitalCurrency =
-                digitalCurrencyInstruments.filter(
-                    (
-                        instrument
-                    ) => {
-                        const text =
-                            getInstrumentText(
-                                instrument
-                            );
-
-                        return (
-                            text.includes(
-                                "BTC"
-                            ) ||
-                            text.includes(
-                                "BITCOIN"
-                            ) ||
-                            text.includes(
-                                "XBT"
-                            )
-                        );
-                    }
-                );
-
-            console.log(
-                `[ODIN] BTC/XBT/BITCOIN matches inside digital-currency Binary Options: ${btcLikeDigitalCurrency.length}`
-            );
-
-            const diagnosticSource =
-                btcLikeDigitalCurrency.length >
-                0
-                    ? btcLikeDigitalCurrency
-                    : digitalCurrencyInstruments;
-
-            const sample =
-                diagnosticSource
-                    .slice(
-                        0,
-                        10
-                    )
-                    .map(
-                        (
-                            instrument
-                        ) => ({
-                            symbol:
-                                instrument.symbol,
-
-                            displayName:
-                                instrument.display_name,
-
-                            underlying:
-                                instrument.underlying_symbol,
-
-                            baseCcy:
-                                instrument.base_ccy,
-
-                            quoteCcy:
-                                instrument.quote_ccy,
-
-                            productType:
-                                instrument.product_type,
-
-                            detailProductType:
-                                instrument.detail_product_type,
-
-                            securityType:
-                                instrument.security_type,
-
-                            securitySubType:
-                                instrument.security_sub_type,
-
-                            expiry:
-                                instrument.expiry_timestamp_ms,
-
-                            tradable:
-                                instrument.tradable,
-
-                            strikeOperator:
-                                getStrikeOperator(
-                                    instrument
-                                ),
-
-                            strikeIndex:
-                                getStrikeIndex(
-                                    instrument
-                                )
-                        })
-                    );
-
-            console.log(
-                "[ODIN] DIGITAL CURRENCY DIAGNOSTIC SAMPLE:",
-                JSON.stringify(
-                    sample,
-                    null,
-                    2
-                )
-            );
-        }
-
-        const verifiedFifteenMinuteInstruments =
-            verifyFifteenMinuteCandidates(
-                btcInstruments
-            );
-
-        console.log(
-            `[ODIN] BTC 15-minute Strike candidates VERIFIED: ${verifiedFifteenMinuteInstruments.length}`
-        );
-
-        const verifiedExpirySet =
-            [
-                ...new Set(
-                    verifiedFifteenMinuteInstruments
-                        .map(
-                            (instrument) =>
-                                safeNumber(
-                                    instrument.expiry_timestamp_ms
-                                )
-                        )
-                        .filter(
-                            (expiry) =>
-                                expiry !== null &&
-                                expiry > now()
-                        )
-                )
-            ].sort(
-                (a, b) => a - b
-            );
-
-        const fifteenMinutePairs =
-            verifiedExpirySet.filter(
-                (expiry, index) =>
-                    index > 0 &&
-                    expiry -
-                        verifiedExpirySet[index - 1] ===
-                        CONFIG.targetStrikeDurationMs
-            ).length;
-
-        console.log(
-            `[ODIN] BTC 15-minute expiry verification: ${fifteenMinutePairs > 0 ? "PASS" : "FAIL"} | verified expiries=${verifiedExpirySet.length} | adjacent 15m pairs=${fifteenMinutePairs}`
-        );
-
-        if (
-            verifiedFifteenMinuteInstruments.length === 0
-        ) {
-            const intraday =
-                btcInstruments.filter(
-                    (instrument) =>
-                        getPeriodCode(instrument) === "I"
-                );
-
-            const expirySummary =
-                [...new Set(
-                    intraday
-                        .map(
-                            (instrument) =>
-                                safeNumber(
-                                    instrument.expiry_timestamp_ms
-                                )
-                        )
-                        .filter(
-                            (expiry) =>
-                                expiry !== null &&
-                                expiry > now()
-                        )
-                )]
-                    .sort(
-                        (a, b) => a - b
-                    )
-                    .slice(0, 12)
-                    .map(
-                        (expiry) =>
-                            new Date(
-                                expiry
-                            ).toISOString()
-                    );
-
-            console.log(
-                "[ODIN] No VERIFIED 15-minute BTC Strike contract is available. Intraday future expiries:",
-                JSON.stringify(
-                    expirySummary
-                )
-            );
-        }
-
-        instruments =
-            verifiedFifteenMinuteInstruments;
-
-        /*
-         * Preserve an active paper contract across
-         * instrument-cache refreshes.
-         */
-
-        const lockedContractSymbol =
+        const lockedSymbol =
             currentRound?.symbol;
 
         const lockedContract =
-            lockedContractSymbol
+            lockedSymbol
                 ? instruments.find(
-                      (
-                          instrument
-                      ) =>
-                          instrument.symbol ===
-                          lockedContractSymbol
+                      (instrument) =>
+                          instrument.symbol === lockedSymbol
                   )
                 : null;
 
         if (
             currentRound &&
-            lockedContract
+            lockedContract &&
+            safeNumber(lockedContract.expiry_timestamp_ms) > now()
         ) {
-            currentContract =
-                {
-                    instrument:
-                        lockedContract,
-
-                    expiry:
-                        safeNumber(
-                            lockedContract
-                                .expiry_timestamp_ms
-                        ),
-
-                    strike:
-                        extractStrikePrice(
-                            lockedContract
-                        ),
-
-                    strikeIndex:
-                        getStrikeIndex(
-                            lockedContract
-                        ),
-
-                    operator:
-                        getStrikeOperator(
-                            lockedContract
-                        )
-                };
+            currentContract = {
+                instrument: lockedContract,
+                expiry: safeNumber(lockedContract.expiry_timestamp_ms),
+                strike: extractStrikePrice(lockedContract),
+                strikeIndex: getStrikeIndex(lockedContract),
+                operator: getStrikeOperator(lockedContract)
+            };
 
             console.log(
-                `[ODIN] Keeping locked paper contract: ${lockedContract.symbol}`
+                `[ODIN] Keeping locked Predict contract: ${lockedContract.symbol}`
             );
         } else {
             currentContract =
-                selectCurrentContract(
-                    instruments
-                );
+                selectCurrentContract(all);
 
-            if (
-                currentContract
-            ) {
+            if (currentContract) {
+                currentPredictionEvent =
+                    predictionEvents.find(
+                        (event) =>
+                            event.id ===
+                            currentContract.instrument.prediction_event_id
+                    ) || null;
+
                 console.log(
-                    `[ODIN] Selected BTC contract: ${currentContract.instrument.symbol}`
+                    `[ODIN] Selected Predict contract: ${currentContract.instrument.symbol} | ${currentContract.instrument.display_name} | expiry=${new Date(currentContract.expiry).toISOString()}`
                 );
             } else {
+                currentPredictionEvent = null;
                 console.log(
-                    "[ODIN] No current BTC Strike contract selected"
+                    "[ODIN] No verified active BTC 15-minute Predict contract found"
                 );
             }
         }
 
-        if (
-            instruments.length ===
-                0 &&
-            now() -
-                lastNoContractLog >
-                30000
-        ) {
-            lastNoContractLog =
-                now();
-
-            console.log(
-                "[ODIN] Loaded 0 BTC Strike instruments"
-            );
-        }
-
-        if (
-            currentContract
-        ) {
+        if (currentContract) {
             const instrument =
                 currentContract.instrument;
 
             state.contractSymbol =
-                instrument.symbol ||
-                null;
+                instrument.symbol || null;
 
             state.contractExpiry =
-                safeNumber(
-                    instrument.expiry_timestamp_ms
-                );
+                safeNumber(instrument.expiry_timestamp_ms);
 
             state.strikePrice =
                 currentContract.strike;
 
             state.strikeDistance =
-                state.btcIndexPrice !==
-                    null &&
-                state.strikePrice !==
-                    null
-                    ? state.btcIndexPrice -
-                        state.strikePrice
-                    : state.btcPrice !==
-                          null &&
-                      state.strikePrice !==
-                          null
-                        ? state.btcPrice -
-                            state.strikePrice
+                state.btcIndexPrice !== null &&
+                state.strikePrice !== null
+                    ? state.btcIndexPrice - state.strikePrice
+                    : state.btcPrice !== null &&
+                      state.strikePrice !== null
+                        ? state.btcPrice - state.strikePrice
                         : null;
 
             const referencePrice =
-                state.btcIndexPrice !==
-                null
+                state.btcIndexPrice !== null
                     ? state.btcIndexPrice
                     : state.btcPrice;
 
             state.strikeDistancePct =
-                referencePrice !==
-                    null &&
-                state.strikePrice !==
-                    null &&
-                state.strikePrice !==
-                    0
-                    ? (
-                          (
-                              referencePrice -
-                              state.strikePrice
-                          ) /
-                          state.strikePrice
-                      ) *
-                      100
+                referencePrice !== null &&
+                state.strikePrice !== null &&
+                referencePrice !== 0
+                    ? ((state.strikePrice - referencePrice) / referencePrice) * 100
                     : null;
 
             state.secondsRemaining =
-                state.contractExpiry !==
-                    null
-                    ? Math.max(
-                          0,
-                          (
-                              state.contractExpiry -
-                              now()
-                          ) /
-                              1000
-                      )
+                state.contractExpiry !== null
+                    ? Math.max(0, (state.contractExpiry - now()) / 1000)
                     : null;
 
             state.activeRoundId =
-                createRoundId(
-                    state.contractExpiry
-                );
-
-            subscribeDCMSettlement(
-                instrument.symbol
-            );
+                createRoundId(state.contractExpiry);
         } else {
-            state.contractSymbol =
-                null;
-
-            state.contractExpiry =
-                null;
-
-            state.strikePrice =
-                null;
-
-            state.strikeDistance =
-                null;
-
-            state.strikeDistancePct =
-                null;
-
-            state.secondsRemaining =
-                null;
-
-            state.activeRoundId =
-                null;
+            state.contractSymbol = null;
+            state.contractExpiry = null;
+            state.strikePrice = null;
+            state.secondsRemaining = null;
+            state.activeRoundId = null;
         }
 
-        state.connected =
-            true;
-    } catch (
-        error
-    ) {
-        state.connected =
-            false;
+        state.connected = true;
+    } catch (error) {
+        state.connected = false;
 
         console.error(
-            "[ODIN] Instrument refresh error:",
+            "[ODIN] Predict event refresh error:",
             error.message
         );
     } finally {
-        instrumentRefreshInProgress =
-            false;
+        instrumentRefreshInProgress = false;
     }
 }
 
@@ -2573,55 +2446,27 @@ async function getContractTicker(
     }
 
     const result =
-        await cryptoRequest(
-            "public/get-tickers",
-            {
-                instrument_name:
-                    contract.instrument
-                        .symbol
-            },
-            CRYPTO_DCM_API
+        await predictionsRequest(
+            `/api/v1/predictions/contracts/${encodeURIComponent(contract.instrument.symbol)}/price`
         );
 
-    const ticker =
-        result?.data?.[0];
+    const data =
+        result?.data;
 
-    if (
-        !ticker
-    ) {
+    if (!data) {
         return null;
     }
 
     return {
-        last:
-            safeNumber(
-                ticker.a
-            ),
-
-        bid:
-            safeNumber(
-                ticker.b
-            ),
-
-        ask:
-            safeNumber(
-                ticker.k
-            ),
-
-        bidSize:
-            safeNumber(
-                ticker.bs
-            ),
-
-        askSize:
-            safeNumber(
-                ticker.ks
-            ),
-
-        timestamp:
-            safeNumber(
-                ticker.t
-            )
+        last: safeNumber(data.mid),
+        bid: safeNumber(data.bid),
+        ask: safeNumber(data.ask),
+        probability: safeNumber(data.probability),
+        spread: safeNumber(data.spread),
+        status: data.status || null,
+        timestamp: data.updated_at
+            ? Date.parse(data.updated_at)
+            : now()
     };
 }
 
@@ -3112,7 +2957,7 @@ function checkDataIntegrity() {
         state.btcIndexStale
     ) {
         reasons.push(
-            "BTC DCM index feed is stale"
+            "BTC index feed is stale"
         );
     }
 
@@ -3144,6 +2989,30 @@ function checkDataIntegrity() {
                 "BTC index/perpetual price divergence is unusually large"
             );
         }
+    }
+
+    if (
+        !state.dataSourceHealth?.predictionApi
+    ) {
+        reasons.push(
+            "Crypto.com Predict API is not verified"
+        );
+    }
+
+    if (
+        !state.dataSourceHealth?.prediction15MinuteEvent
+    ) {
+        reasons.push(
+            "No verified active BTC 15-minute Predict event"
+        );
+    }
+
+    if (
+        !state.dataSourceHealth?.predictionContractPrice
+    ) {
+        reasons.push(
+            "Predict contract price feed is not verified"
+        );
     }
 
     if (
@@ -3388,26 +3257,37 @@ async function collectContractData() {
                 2;
 
             state.marketProbability =
-                clamp(
-                    state.contractMid *
-                        10,
-                    0,
-                    100
-                );
+                ticker.probability !== null
+                    ? clamp(
+                          ticker.probability,
+                          0,
+                          100
+                      )
+                    : clamp(
+                          state.contractMid *
+                              100,
+                          0,
+                          100
+                      );
         } else {
             state.contractMid =
                 ticker.last;
 
             state.marketProbability =
-                ticker.last !==
-                null
+                ticker.probability !== null
                     ? clamp(
-                          ticker.last *
-                              10,
+                          ticker.probability,
                           0,
                           100
                       )
-                    : null;
+                    : ticker.last !== null
+                        ? clamp(
+                              ticker.last *
+                                  100,
+                              0,
+                              100
+                          )
+                        : null;
         }
     } catch (
         error
@@ -3631,6 +3511,14 @@ function startNewRound() {
 
             operator:
                 currentContract.operator,
+
+            predictionEventId:
+                currentContract.instrument.prediction_event_id ||
+                null,
+
+            predictionContractId:
+                currentContract.instrument.prediction_contract_id ||
+                null,
 
             forecast:
                 null,
@@ -4241,7 +4129,7 @@ function resolveCurrentContract() {
     );
 }
 
-function evaluateExpiredRound() {
+async function evaluateExpiredRound() {
     if (
         !currentRound ||
         currentRound.result
@@ -4263,153 +4151,179 @@ function evaluateExpiredRound() {
     }
 
     if (
-        state.btcIndexPrice ===
-            null &&
-        state.btcPrice ===
-            null
+        !currentRound.predictionEventId ||
+        !currentRound.predictionContractId
     ) {
+        console.log(
+            `[ODIN] Round ${currentRound.id} not resolved: Predict event/contract identity unavailable.`
+        );
         return;
     }
 
-    if (
-        currentRound.strike ===
-        null
-    ) {
-        return;
-    }
+    try {
+        const response =
+            await predictionsRequest(
+                `/api/v1/predictions/events/${encodeURIComponent(currentRound.predictionEventId)}`
+            );
 
-    /*
-     * Prefer the DCM settlement channel when it has
-     * a matching contract result. Otherwise use the
-     * current CDNA index value.
-     */
+        const event =
+            response?.data;
 
-    const settlementPrice =
-        dcmSettlementCache &&
-        dcmSettlementCache.symbol ===
-            currentRound.symbol
-            ? safeNumber(
-                  dcmSettlementCache.price
-              )
-            : null;
+        const contracts =
+            Array.isArray(event?.contracts)
+                ? event.contracts
+                : [];
 
-    const finalPrice =
-        settlementPrice !==
-        null
-            ? settlementPrice
-            : state.btcIndexPrice !==
-              null
-                ? state.btcIndexPrice
-                : state.btcPrice;
+        const selected =
+            contracts.find(
+                (contract) =>
+                    String(contract?.id) ===
+                    String(currentRound.predictionContractId)
+            );
 
-    const above =
-        finalPrice >
-        currentRound.strike;
+        const selectedStatus =
+            String(
+                selected?.status ||
+                ""
+            ).toLowerCase();
 
-    let result =
-        "UNKNOWN";
+        const winner =
+            contracts.find(
+                (contract) =>
+                    String(
+                        contract?.status ||
+                        ""
+                    ).toLowerCase().includes("win") ||
+                    String(
+                        contract?.status ||
+                        ""
+                    ).toLowerCase().includes("winner") ||
+                    (
+                        String(
+                            contract?.status ||
+                            ""
+                        ).toLowerCase().includes("resolved") &&
+                        safeNumber(contract?.chance) !== null &&
+                        safeNumber(contract?.chance) >= 99.999
+                    )
+            );
 
-    if (
-        currentRound.forecast ===
-        "YES"
-    ) {
-        result =
-            above
+        const eventResolved =
+            String(
+                event?.status ||
+                ""
+            ).toLowerCase() ===
+                "resolved" ||
+            String(
+                event?.status ||
+                ""
+            ).toLowerCase() ===
+                "settled";
+
+        const explicitWinner =
+            eventResolved &&
+            winner &&
+            winner.id !== undefined &&
+            winner.id !== null;
+
+        if (
+            !explicitWinner
+        ) {
+            console.log(
+                `[ODIN] Round ${currentRound.id} expired, but Crypto.com Predict has not exposed an authoritative winner yet. Event status=${event?.status || "unknown"} | selected status=${selectedStatus || "unknown"}`
+            );
+            return;
+        }
+
+        const selectedWon =
+            String(winner.id) ===
+            String(currentRound.predictionContractId);
+
+        const result =
+            selectedWon
                 ? "WIN"
                 : "LOSS";
-    } else if (
-        currentRound.forecast ===
-        "NO"
-    ) {
-        result =
-            above
-                ? "LOSS"
-                : "WIN";
-    } else {
-        result =
-            "PASS";
+
+        currentRound.finalPrice =
+            null;
+
+        currentRound.result =
+            result;
+
+        currentRound.resolvedAt =
+            now();
+
+        currentRound.settlementSource =
+            "CRYPTO_PREDICTIONS_API_WINNER";
+
+        completedRounds.push({
+            ...currentRound
+        });
+
+        while (
+            completedRounds.length >
+            CONFIG.forecastHistoryLimit
+        ) {
+            completedRounds.shift();
+        }
+
+        console.log(
+            `[ODIN] Round ${currentRound.id} resolved: ${result} | Predict winner=${winner.id} | Source=CRYPTO_PREDICTIONS_API_WINNER`
+        );
+
+        currentRound =
+            null;
+
+        currentContract =
+            null;
+
+        dcmSubscribedContractSymbol =
+            null;
+
+        dcmSettlementCache =
+            null;
+
+        state.forecast =
+            "WAIT";
+
+        state.forecastProbability =
+            null;
+
+        state.forecastConfidence =
+            null;
+
+        state.forecastLocked =
+            false;
+
+        state.lockedForecast =
+            null;
+
+        state.lockedProbability =
+            null;
+
+        state.lockedConfidence =
+            null;
+
+        state.lockedAt =
+            null;
+
+        state.lockedContractSymbol =
+            null;
+
+        state.lockedContractExpiry =
+            null;
+
+        state.activeRoundId =
+            null;
+
+        state.phase =
+            "WAITING";
+    } catch (error) {
+        console.error(
+            `[ODIN] Predict settlement verification failed for round ${currentRound.id}:`,
+            error.message
+        );
     }
-
-    currentRound.finalPrice =
-        finalPrice;
-
-    currentRound.result =
-        result;
-
-    currentRound.resolvedAt =
-        now();
-
-    currentRound.settlementSource =
-        settlementPrice !==
-        null
-            ? "DCM_SETTLEMENT"
-            : state.btcIndexPrice !==
-              null
-                ? "BTC_INDEX"
-                : "BTC_PERP_FALLBACK";
-
-    completedRounds.push({
-        ...currentRound
-    });
-
-    while (
-        completedRounds.length >
-        CONFIG.forecastHistoryLimit
-    ) {
-        completedRounds.shift();
-    }
-
-    console.log(
-        `[ODIN] Round ${currentRound.id} resolved: ${result} | Final Price: ${finalPrice} | Strike: ${currentRound.strike} | Source: ${currentRound.settlementSource}`
-    );
-
-    currentRound =
-        null;
-
-    currentContract =
-        null;
-
-    dcmSubscribedContractSymbol =
-        null;
-
-    dcmSettlementCache =
-        null;
-
-    state.forecast =
-        "WAIT";
-
-    state.forecastProbability =
-        null;
-
-    state.forecastConfidence =
-        null;
-
-    state.forecastLocked =
-        false;
-
-    state.lockedForecast =
-        null;
-
-    state.lockedProbability =
-        null;
-
-    state.lockedConfidence =
-        null;
-
-    state.lockedAt =
-        null;
-
-    state.lockedContractSymbol =
-        null;
-
-    state.lockedContractExpiry =
-        null;
-
-    state.activeRoundId =
-        null;
-
-    state.phase =
-        "WAITING";
 }
 
 function getPerformance() {
@@ -4540,34 +4454,51 @@ function serializeState() {
 }
 
 async function verifyDataSourcesAtRuntime() {
-    const startedAt =
-        now();
+    const startedAt = now();
 
     try {
         const [
             index,
             perp,
             book,
-            trades
+            trades,
+            predictionPrice
         ] = await Promise.all([
             getBTCIndex(),
             getBTCPerpTicker(),
             getBTCBook(),
-            getBTCTrades()
+            getBTCTrades(),
+            currentContract
+                ? getContractTicker(currentContract)
+                : Promise.resolve(null)
         ]);
 
         const bookOk =
             Boolean(
                 book &&
-                calculateOrderBookMetrics(
-                    book
+                calculateOrderBookMetrics(book)
+            );
+
+        const predictionEventOk =
+            Boolean(
+                currentContract?.instrument?.prediction_event_id &&
+                /\b15\s*(?:min|mins|minute|minutes)\b/i.test(
+                    currentContract?.instrument?.prediction_period || ""
                 )
             );
 
         state.dataSourceHealth = {
             ...(state.dataSourceHealth || {}),
-            dcmInstruments:
-                rawBinaryInstruments.length > 0,
+            predictionApi:
+                predictionEvents.length > 0,
+            prediction15MinuteEvent:
+                predictionEventOk,
+            predictionContractPrice:
+                Boolean(
+                    predictionPrice &&
+                    predictionPrice.last !== null
+                ),
+            dcmInstruments: false,
             btcIndex:
                 Boolean(
                     index &&
@@ -4585,14 +4516,33 @@ async function verifyDataSourcesAtRuntime() {
                 Array.isArray(trades) &&
                 trades.length > 0,
             verifiedStrikeContract:
+                predictionEventOk &&
                 Boolean(currentContract),
             lastCheckedAt:
                 now()
         };
 
         console.log(
-            `[ODIN] DATA HEALTH | DCM instruments=${state.dataSourceHealth.dcmInstruments} | index=${state.dataSourceHealth.btcIndex} (${index?.source || "none"}) | perp=${state.dataSourceHealth.btcPerp} | book=${state.dataSourceHealth.btcBook} | trades=${state.dataSourceHealth.btcTrades} | verified15m=${state.dataSourceHealth.verifiedStrikeContract} | ${now() - startedAt}ms`
+            `[ODIN] DATA HEALTH | Predict API=${state.dataSourceHealth.predictionApi} | 15m event=${state.dataSourceHealth.prediction15MinuteEvent} | contract price=${state.dataSourceHealth.predictionContractPrice} | BTC index=${state.dataSourceHealth.btcIndex} (${index?.source || "none"}) | perp=${state.dataSourceHealth.btcPerp} | book=${state.dataSourceHealth.btcBook} | trades=${state.dataSourceHealth.btcTrades} | ${now() - startedAt}ms`
         );
+
+        if (
+            !state.dataSourceHealth.predictionApi ||
+            !state.dataSourceHealth.prediction15MinuteEvent ||
+            !state.dataSourceHealth.predictionContractPrice
+        ) {
+            state.paperEmergency =
+                true;
+
+            state.paperEmergencyReason =
+                "Crypto.com Predict 15-minute event/contract data failed runtime verification";
+        } else {
+            state.paperEmergency =
+                false;
+
+            state.paperEmergencyReason =
+                null;
+        }
 
         return state.dataSourceHealth;
     } catch (error) {
@@ -4661,7 +4611,7 @@ async function poll() {
 
         calculateForecast();
 
-        evaluateExpiredRound();
+        await evaluateExpiredRound();
 
         state.secondsRemaining =
             state.contractExpiry !==
@@ -4867,7 +4817,7 @@ server.listen(
         );
 
         console.log(
-            "          ODIN STRIKE OPTIONS BOT"
+            "          ODIN CRYPTO.COM PREDICT"
         );
 
         console.log(
@@ -4883,7 +4833,7 @@ server.listen(
         );
 
         console.log(
-            "Market: BTC Strike Options"
+            "Market: BTC 15-minute Predict"
         );
 
         console.log(
@@ -4895,7 +4845,7 @@ server.listen(
         );
 
         console.log(
-            "Index: DCM/CDNA-funded BTC index"
+            "Market data: Crypto.com Predict + Exchange REST diagnostics"
         );
 
         console.log(
